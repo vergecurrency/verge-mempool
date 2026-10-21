@@ -1,0 +1,5 @@
+* text=auto
+*.sh text eol=lf
+*.bash text eol=lf
+*.service text eol=lf
+mempool/deployment/verge/source-excludes.txt text eol=lf

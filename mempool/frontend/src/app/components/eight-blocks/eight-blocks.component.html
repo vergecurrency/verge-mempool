@@ -1,0 +1,29 @@
+<div class="blocks" [class.wrap]="wrapBlocks">
+  <ng-container *ngFor="let i of blockIndices">
+    <div class="block-wrapper" [style]="wrapperStyle">
+      <div class="block-container" [style]="containerStyle">
+        <app-block-overview-graph
+          #blockGraph
+          [isLoading]="false"
+          [resolution]="resolution"
+          [blockLimit]="stateService.blockVSize"
+          [orientation]="'top'"
+          [flip]="false"
+          [animationDuration]="animationDuration"
+          [animationOffset]="animationOffset"
+          [disableSpinner]="true"
+          [relativeTime]="blockInfo[i]?.timestamp"
+          (txClickEvent)="onTxClick($event)"
+        ></app-block-overview-graph>
+        <div *ngIf="showInfo && blockInfo[i]" class="info" @infoChange>
+          <h1 class="height">{{ blockInfo[i].height }}</h1>
+          @if (blockInfo[i].extras.pool.name && blockInfo[i].extras.pool.name !== 'Unknown') {
+            <h2 class="mined-by" i18n="eight-blocks.mined-by">by {{ blockInfo[i].extras.pool.name }}</h2>
+          } @else {
+            <h2 class="mined-by" i18n="eight-blocks.mined-by-unknown">by Unknown</h2>
+          }
+        </div>
+      </div>
+    </div>
+  </ng-container>
+</div>

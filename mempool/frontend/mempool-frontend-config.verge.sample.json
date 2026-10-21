@@ -1,0 +1,23 @@
+{
+  "CHAIN": "verge",
+  "ROOT_NETWORK": "testnet",
+  "MAINNET_ENABLED": false,
+  "TESTNET_ENABLED": true,
+  "TESTNET4_ENABLED": false,
+  "SIGNET_ENABLED": false,
+  "REGTEST_ENABLED": false,
+  "LIQUID_ENABLED": false,
+  "LIQUID_TESTNET_ENABLED": false,
+  "BASE_MODULE": "mempool",
+  "BLOCK_WEIGHT_UNITS": 4000000,
+  "MINING_DASHBOARD": false,
+  "LIGHTNING": false,
+  "HISTORICAL_PRICE": false,
+  "ACCELERATOR": false,
+  "ACCELERATOR_BUTTON": false,
+  "PUBLIC_ACCELERATIONS": false,
+  "STRATUM_ENABLED": false,
+  "AUDIT": false,
+  "MEMPOOL_WEBSITE_URL": "http://127.0.0.1:4200",
+  "SERVICES_API": ""
+}

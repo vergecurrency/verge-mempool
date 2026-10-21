@@ -1,0 +1,17 @@
+sitemap
+data
+docker-compose.yml
+backend/mempool-config.json
+*.swp
+frontend/src/resources/config.template.js
+frontend/src/resources/config.js
+# Local investigation notes, including copies placed anywhere in this tree.
+ARCHITECTURE.md
+VERGE_COMPATIBILITY.md
+IMPLEMENTATION_PLAN.md
+architecture.md
+verge_compatibility.md
+implementation_plan.md
+.local/
+target
+docker/backend/start_ci.sh

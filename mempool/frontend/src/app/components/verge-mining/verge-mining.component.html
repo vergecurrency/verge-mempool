@@ -1,0 +1,23 @@
+<section class="card mt-3" aria-label="Verge proof and mining statistics">
+  <div class="card-body">
+    <h2 class="h5 card-title">Verge mining algorithms</h2>
+    <ng-container *ngIf="statistics$ | async as stats; else unavailable">
+      <p class="small">{{ stats.sampleBlocks }} blocks sampled, heights {{ stats.fromHeight }}–{{ stats.height }}.
+        Current proof: {{ stats.proof === 'pos' ? 'Proof of stake' : 'Proof of work' }}.</p>
+      <p *ngIf="stats.proof === 'pos'" class="small">Proof-of-work hashrate estimates are unavailable after the proof-of-stake transition.</p>
+      <div class="table-responsive">
+        <table class="table table-sm mb-2">
+          <thead><tr><th scope="col">Algorithm</th><th scope="col">Last difficulty</th><th scope="col">Core estimate (H/s)</th><th scope="col">Blocks</th></tr></thead>
+          <tbody><tr *ngFor="let algorithm of stats.algorithms">
+            <th scope="row">{{ algorithm.algorithm }}</th>
+            <td>{{ algorithm.difficulty === null ? 'Unavailable' : (algorithm.difficulty | number:'1.2-12') }}</td>
+            <td>{{ algorithm.hashrate === null ? 'Unavailable' : (algorithm.hashrate | number:'1.0-2') }}</td>
+            <td>{{ algorithm.blocksInSample }}</td>
+          </tr></tbody>
+        </table>
+      </div>
+      <p class="small text-secondary mb-0">Per-algorithm estimates come from Verge Core. Hashrates from different algorithms are not combined.</p>
+    </ng-container>
+    <ng-template #unavailable><p class="mb-0">Mining statistics are temporarily unavailable.</p></ng-template>
+  </div>
+</section>

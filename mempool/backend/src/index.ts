@@ -1,0 +1,485 @@
+import express from 'express';
+import { Application, Request, Response, NextFunction } from 'express';
+import * as fs from 'fs';
+import * as http from 'http';
+import * as WebSocket from 'ws';
+import bitcoinApi from './api/bitcoin/bitcoin-api-factory';
+import cluster from 'cluster';
+import DB from './database';
+import config from './config';
+import blocks from './api/blocks';
+import memPool from './api/mempool';
+import diskCache from './api/disk-cache';
+import statistics from './api/statistics/statistics';
+import websocketHandler from './api/websocket-handler';
+import logger from './logger';
+import backendInfo from './api/backend-info';
+import loadingIndicators from './api/loading-indicators';
+import mempool from './api/mempool';
+import elementsParser from './api/liquid/elements-parser';
+import databaseMigration from './api/database-migration';
+import syncAssets from './sync-assets';
+import icons from './api/liquid/icons';
+import { Common } from './api/common';
+import poolsUpdater from './tasks/pools-updater';
+import indexer from './indexer';
+import nodesRoutes from './api/explorer/nodes.routes';
+import channelsRoutes from './api/explorer/channels.routes';
+import generalLightningRoutes from './api/explorer/general.routes';
+import lightningStatsUpdater from './tasks/lightning/stats-updater.service';
+import networkSyncService from './tasks/lightning/network-sync.service';
+import statisticsRoutes from './api/statistics/statistics.routes';
+import pricesRoutes from './api/prices/prices.routes';
+import miningRoutes from './api/mining/mining-routes';
+import liquidRoutes from './api/liquid/liquid.routes';
+import bitcoinRoutes from './api/bitcoin/bitcoin.routes';
+import servicesRoutes from './api/services/services-routes';
+import fundingTxFetcher from './tasks/lightning/sync-tasks/funding-tx-fetcher';
+import forensicsService from './tasks/lightning/forensics.service';
+import priceUpdater from './tasks/price-updater';
+import chainTips from './api/chain-tips';
+import { AxiosError } from 'axios';
+import v8 from 'v8';
+import { formatBytes, getBytesUnit } from './utils/format';
+import redisCache from './api/redis-cache';
+import accelerationApi from './api/services/acceleration';
+import bitcoinCoreRoutes from './api/bitcoin/bitcoin-core.routes';
+import bitcoinSecondClient from './api/bitcoin/bitcoin-second-client';
+import accelerationRoutes from './api/acceleration/acceleration.routes';
+import aboutRoutes from './api/about.routes';
+import mempoolBlocks from './api/mempool-blocks';
+import walletApi from './api/services/wallets';
+import stratumApi from './api/services/stratum';
+import bitcoinClient from './api/bitcoin/bitcoin-client';
+import { activeVergeProfile, isVerge } from './api/verge/runtime';
+import { verifyVergeRpc } from './api/verge/rpc';
+import { registerVergeRoutes } from './api/verge/routes';
+
+class Server {
+  private wss: WebSocket.Server | undefined;
+  private wssUnixSocket: WebSocket.Server | undefined;
+  private server: http.Server | undefined;
+  private serverUnixSocket: http.Server | undefined;
+  private app: Application;
+  private currentBackendRetryInterval = 1;
+  private backendRetryCount = 0;
+
+  private maxHeapSize: number = 0;
+  private heapLogInterval: number = 60;
+  private warnedHeapCritical: boolean = false;
+  private lastHeapLogTime: number | null = null;
+
+  constructor() {
+    this.app = express();
+    this.app.set('case sensitive routing', true);
+
+    if (cluster.isPrimary && config.MEMPOOL.UNIX_SOCKET_PATH) {
+      this.clearStaleUnixSocket(config.MEMPOOL.UNIX_SOCKET_PATH);
+    }
+
+    if (!config.MEMPOOL.SPAWN_CLUSTER_PROCS) {
+      this.startServer().catch(error => this.handleStartupError(error));
+      return;
+    }
+
+    if (cluster.isPrimary) {
+      logger.notice(`Mempool Server (Master) is running on port ${config.MEMPOOL.HTTP_PORT} (${backendInfo.getShortCommitHash()})`);
+
+      const numCPUs = config.MEMPOOL.SPAWN_CLUSTER_PROCS;
+      for (let i = 0; i < numCPUs; i++) {
+        const env = { workerId: i };
+        const worker = cluster.fork(env);
+        worker.process['env'] = env;
+      }
+
+      cluster.on('exit', (worker, code, signal) => {
+        const workerId = worker.process['env'].workerId;
+        logger.warn(`Mempool Worker PID #${worker.process.pid} workerId: ${workerId} died. Restarting in 10 seconds... ${signal || code}`);
+        setTimeout(() => {
+          const env = { workerId: workerId };
+          const newWorker = cluster.fork(env);
+          newWorker.process['env'] = env;
+        }, 10000);
+      });
+    } else {
+      this.startServer(true).catch(error => this.handleStartupError(error));
+    }
+  }
+
+  private handleStartupError(error: unknown): void {
+    logger.err(`Server startup failed: ${error instanceof Error ? error.message : error}`);
+    this.forceExit('startup', 1);
+  }
+
+  /** @asyncUnsafe */
+  async startServer(worker = false): Promise<void> {
+    logger.notice(`Starting Mempool Server${worker ? ' (worker)' : ''}... (${backendInfo.getShortCommitHash()})`);
+    if (activeVergeProfile) {
+      if (config.LIGHTNING.ENABLED || config.FIAT_PRICE.ENABLED || config.MEMPOOL_SERVICES.ACCELERATIONS || config.STRATUM.ENABLED || config.MEMPOOL.AUDIT || config.MEMPOOL.CLUSTER_MEMPOOL) {
+        throw new Error('Disable unported Lightning, BTC price feeds, acceleration, stratum, audit and cluster-mempool features for the Verge profile');
+      }
+      const connection = await verifyVergeRpc(bitcoinClient, activeVergeProfile);
+      if (await bitcoinApi.$getBlockHash(0) !== activeVergeProfile.genesis) { throw new Error('Explorer backend genesis does not match Verge Core'); }
+      logger.notice(`Verified Verge ${connection.network} RPC at height ${connection.height}`);
+      websocketHandler.setExtraInitData('chain', activeVergeProfile);
+    }
+
+    // Register cleanup listeners for exit events
+    ['SIGHUP', 'SIGINT', 'SIGTERM', 'SIGUSR1', 'SIGUSR2'].forEach(event => {
+      process.on(event, () => { this.forceExit(event); });
+    });
+    process.on('exit', () => {
+      logger.debug(`'exit' event triggered`);
+      this.exitCleanup();
+    });
+    process.on('uncaughtException', (error) => {
+      console.error(`uncaughtException:`, error);
+      this.forceExit('uncaughtException', 1);
+    });
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error(`unhandledRejection:`, reason, promise);
+      this.forceExit('unhandledRejection', 1);
+    });
+
+    if (config.MEMPOOL.BACKEND === 'esplora') {
+      bitcoinApi.startHealthChecks();
+    }
+
+    if (config.DATABASE.ENABLED) {
+      DB.getPidLock();
+
+      await DB.checkDbConnection();
+      try {
+        if (process.env.npm_config_reindex_blocks === 'true') { // Re-index requests
+          await databaseMigration.$blocksReindexingTruncate();
+        }
+        await databaseMigration.$initializeOrMigrateDatabase();
+      } catch (e) {
+        throw new Error(e instanceof Error ? e.message : 'Error');
+      }
+    }
+
+    this.app
+      .use((req: Request, res: Response, next: NextFunction) => {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Accept,Authorization,Cache-Control,Content-Type,DNT,If-Modified-Since,Keep-Alive,Origin,User-Agent,X-Requested-With');
+        res.setHeader('Access-Control-Expose-Headers', 'X-Total-Count,X-Mempool-Auth');
+        next();
+      })
+      .use(express.urlencoded({ extended: true, limit: '10mb' }))
+      .use(express.text({ type: ['text/plain', 'application/base64'], limit: '10mb' }))
+      .use(express.json({ limit: '10mb' }))
+      ;
+
+    if (config.DATABASE.ENABLED && config.FIAT_PRICE.ENABLED) {
+      /** @asyncUnsafe */
+      await priceUpdater.$initializeLatestPriceWithDb();
+    }
+
+    this.server = http.createServer(this.app);
+    this.wss = new WebSocket.Server({ server: this.server, maxPayload: websocketHandler.MAX_MESSAGE_SIZE });
+    if (config.MEMPOOL.UNIX_SOCKET_PATH) {
+      this.serverUnixSocket = http.createServer(this.app);
+      this.wssUnixSocket = new WebSocket.Server({ server: this.serverUnixSocket, maxPayload: websocketHandler.MAX_MESSAGE_SIZE });
+    }
+
+    this.setUpWebsocketHandling();
+
+    await poolsUpdater.updatePoolsJson(); // Needs to be done before loading the disk cache because we sometimes wipe it
+    if (!isVerge && config.DATABASE.ENABLED === true && config.MEMPOOL.ENABLED && ['mainnet', 'testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK) && !poolsUpdater.currentSha) {
+      logger.err(`Failed to retrieve pools-v2.json sha, cannot run block indexing. Please make sure you've set valid urls in your mempool-config.json::MEMPOOL::POOLS_JSON_URL and mempool-config.json::MEMPOOL::POOLS_JSON_TREE_UR, aborting now`);
+      return process.exit(1);
+    }
+
+    await syncAssets.syncAssets$();
+    if (config.DATABASE.ENABLED) {
+      /** @asyncUnsafe */
+      await mempoolBlocks.updatePools$();
+    }
+    if (config.MEMPOOL.ENABLED) {
+      if (config.MEMPOOL.CACHE_ENABLED) {
+        await diskCache.$loadMempoolCache();
+      } else if (config.REDIS.ENABLED) {
+        let currentMempoolTxids: Set<string> | undefined;
+        try {
+          currentMempoolTxids = new Set(await bitcoinApi.$getRawMempool());
+        } catch (e) {
+          logger.warn(`Failed to fetch raw mempool before loading Redis cache. Reason: ${e instanceof Error ? e.message : e}`);
+        }
+        /** @asyncUnsafe */
+        await redisCache.$loadCache(currentMempoolTxids);
+      }
+    }
+
+    if (config.STATISTICS.ENABLED && config.DATABASE.ENABLED && cluster.isPrimary) {
+      statistics.startStatistics();
+    }
+
+    if (Common.isLiquid()) {
+      const refreshIcons = () => {
+        try {
+          icons.loadIcons();
+        } catch (e) {
+          logger.err('Cannot load liquid icons. Ignoring. Reason: ' + (e instanceof Error ? e.message : e));
+        }
+      };
+      // Run once on startup.
+      refreshIcons();
+      // Matches crontab refresh interval for asset db.
+      setInterval(refreshIcons, 3600_000);
+    }
+
+    if (config.FIAT_PRICE.ENABLED) {
+      void priceUpdater.$run();
+    }
+    await chainTips.updateOrphanedBlocks();
+
+    this.setUpHttpApiRoutes();
+
+    if (config.MEMPOOL.ENABLED) {
+      void this.runMainUpdateLoop();
+      indexer.scheduleSingleTask('poolsStats', 0);
+    }
+
+    setInterval(() => { this.healthCheck(); }, 2500);
+
+    if (config.LIGHTNING.ENABLED) {
+      void this.$runLightningBackend();
+    }
+
+    this.server.listen(config.MEMPOOL.HTTP_PORT, config.MEMPOOL.HTTP_HOST || undefined, () => {
+      if (worker) {
+        logger.info(`Mempool Server worker #${process.pid} started`);
+      } else {
+        logger.notice(`Mempool Server is running on port ${config.MEMPOOL.HTTP_PORT}`);
+      }
+    });
+    this.server.keepAliveTimeout = 70 * 1000;
+    this.server.headersTimeout = 71 * 1000;
+
+    if (this.serverUnixSocket) {
+      this.serverUnixSocket.listen(config.MEMPOOL.UNIX_SOCKET_PATH, () => {
+        if (worker) {
+          logger.info(`Mempool Server worker #${process.pid} started`);
+        } else {
+          logger.notice(`Mempool Server is listening on ${config.MEMPOOL.UNIX_SOCKET_PATH}`);
+        }
+      });
+
+      this.serverUnixSocket.keepAliveTimeout = 70 * 1000;
+      this.serverUnixSocket.headersTimeout = 71 * 1000;
+    }
+
+    void poolsUpdater.$startService();
+  }
+
+  clearStaleUnixSocket(path: string): void {
+    try {
+      if (fs.existsSync(path)) {
+        fs.unlinkSync(path);
+        logger.notice(`Removed stale unix socket ${path}`);
+      }
+    } catch (e) {
+      logger.err(`Failed to remove stale unix socket ${path}. Reason: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  /** @asyncSafe */
+  async runMainUpdateLoop(): Promise<void> {
+    const start = Date.now();
+    try {
+      try {
+        await memPool.$updateMemPoolInfo();
+      } catch (e) {
+        const msg = `updateMempoolInfo: ${(e instanceof Error ? e.message : e)}`;
+        if (config.MEMPOOL.USE_SECOND_NODE_FOR_MINFEE) {
+          logger.warn(msg);
+        } else {
+          logger.debug(msg);
+        }
+      }
+      const newMempool = await bitcoinApi.$getRawMempool();
+      const minFeeMempool = memPool.limitGBT ? await bitcoinSecondClient.getRawMemPool() : null;
+      const minFeeTip = memPool.limitGBT ? await bitcoinSecondClient.getBlockCount() : -1;
+      const latestAccelerations = await accelerationApi.$updateAccelerations();
+      const numHandledBlocks = await blocks.$updateBlocks();
+      await poolsUpdater.$recheckBlocks();
+      const pollRate = config.MEMPOOL.POLL_RATE_MS * (!isVerge && indexer.indexerIsRunning() ? 10 : 1);
+      if (numHandledBlocks === 0) {
+        await memPool.$updateMempool(newMempool, latestAccelerations, minFeeMempool, minFeeTip, pollRate);
+      }
+      void indexer.$run();
+      if (config.WALLETS.ENABLED) {
+        // might take a while, so run in the background
+        void walletApi.$syncWallets();
+      }
+      if (config.FIAT_PRICE.ENABLED) {
+        void priceUpdater.$run();
+      }
+
+      // rerun immediately if we skipped the mempool update, otherwise wait POLL_RATE_MS
+      const elapsed = Date.now() - start;
+      const remainingTime = Math.max(0, pollRate - elapsed);
+      setTimeout(this.runMainUpdateLoop.bind(this), numHandledBlocks > 0 ? 0 : remainingTime);
+      this.backendRetryCount = 0;
+    } catch (e: any) {
+      this.backendRetryCount++;
+      let loggerMsg = `Exception in runMainUpdateLoop() (count: ${this.backendRetryCount}). Retrying in ${this.currentBackendRetryInterval} sec.`;
+      loggerMsg += ` Reason: ${(e instanceof Error ? e.message : e)}.`;
+      if (e?.stack) {
+        loggerMsg += ` Stack trace: ${e.stack}`;
+      }
+      // When we get a first Exception, only `logger.debug` it and retry after 5 seconds
+      // From the second Exception, `logger.warn` the Exception and increase the retry delay
+      if (this.backendRetryCount >= 5) {
+        logger.warn(loggerMsg);
+        mempool.setOutOfSync();
+      } else {
+        logger.debug(loggerMsg);
+      }
+      if (e instanceof AxiosError) {
+        logger.debug(`AxiosError: ${e?.message}`);
+      }
+      setTimeout(this.runMainUpdateLoop.bind(this), 1000 * this.currentBackendRetryInterval);
+    } finally {
+      diskCache.unlock();
+    }
+  }
+
+  /** @asyncSafe */
+  async $runLightningBackend(): Promise<void> {
+    try {
+      await fundingTxFetcher.$init();
+      await networkSyncService.$startService();
+      await lightningStatsUpdater.$startService();
+      await forensicsService.$startService();
+    } catch(e) {
+      logger.err(`Exception in $runLightningBackend. Restarting in 1 minute. Reason: ${(e instanceof Error ? e.message : e)}`);
+      await Common.sleep$(1000 * 60);
+      void this.$runLightningBackend();
+    };
+  }
+
+  setUpWebsocketHandling(): void {
+    if (this.wss) {
+      websocketHandler.addWebsocketServer(this.wss);
+    }
+    if (this.wssUnixSocket) {
+      websocketHandler.addWebsocketServer(this.wssUnixSocket);
+    }
+
+    if (Common.isLiquid() && config.DATABASE.ENABLED) {
+      /** @asyncSafe */
+      const parseElements = async (): Promise<void> => {
+        try {
+          await elementsParser.$parse();
+        } catch (e) {
+          logger.warn('Elements parsing error: ' + (e instanceof Error ? e.message : e));
+        }
+      };
+      blocks.setNewBlockCallback(parseElements);
+      void parseElements();
+      setInterval(() => { void parseElements(); }, 60_000);
+    }
+    websocketHandler.setupConnectionHandling();
+    if (config.MEMPOOL.ENABLED) {
+      statistics.setNewStatisticsEntryCallback(websocketHandler.handleNewStatistic.bind(websocketHandler));
+      memPool.setAsyncMempoolChangedCallback(websocketHandler.$handleMempoolChange.bind(websocketHandler));
+    }
+    if (config.FIAT_PRICE.ENABLED) {
+      priceUpdater.setRatesChangedCallback(websocketHandler.handleNewConversionRates.bind(websocketHandler));
+    }
+    loadingIndicators.setProgressChangedCallback(websocketHandler.handleLoadingChanged.bind(websocketHandler));
+
+    void accelerationApi.connectWebsocket();
+    if (config.STRATUM.ENABLED) {
+      void stratumApi.connectWebsocket();
+    }
+  }
+
+  setUpHttpApiRoutes(): void {
+    registerVergeRoutes(this.app);
+    bitcoinRoutes.initRoutes(this.app);
+    if (config.MEMPOOL.OFFICIAL) {
+      bitcoinCoreRoutes.initRoutes(this.app);
+    }
+    pricesRoutes.initRoutes(this.app);
+    if (config.STATISTICS.ENABLED && config.DATABASE.ENABLED && config.MEMPOOL.ENABLED) {
+      statisticsRoutes.initRoutes(this.app);
+    }
+    if (Common.indexingEnabled() && config.MEMPOOL.ENABLED) {
+      miningRoutes.initRoutes(this.app);
+    }
+    if (Common.isLiquid()) {
+      liquidRoutes.initRoutes(this.app);
+    }
+    if (config.LIGHTNING.ENABLED) {
+      generalLightningRoutes.initRoutes(this.app);
+      nodesRoutes.initRoutes(this.app);
+      channelsRoutes.initRoutes(this.app);
+    }
+    if (config.MEMPOOL_SERVICES.ACCELERATIONS) {
+      accelerationRoutes.initRoutes(this.app);
+    }
+    if (config.WALLETS.ENABLED) {
+      servicesRoutes.initRoutes(this.app);
+    }
+    if (!config.MEMPOOL.OFFICIAL) {
+      aboutRoutes.initRoutes(this.app);
+    }
+  }
+
+  healthCheck(): void {
+    const now = Date.now();
+    const stats = v8.getHeapStatistics();
+    this.maxHeapSize = Math.max(stats.used_heap_size, this.maxHeapSize);
+    const warnThreshold = 0.8 * stats.heap_size_limit;
+
+    const byteUnits = getBytesUnit(Math.max(this.maxHeapSize, stats.heap_size_limit));
+
+    if (!this.warnedHeapCritical && this.maxHeapSize > warnThreshold) {
+      this.warnedHeapCritical = true;
+      logger.warn(`Used ${(this.maxHeapSize / stats.heap_size_limit * 100).toFixed(2)}% of heap limit (${formatBytes(this.maxHeapSize, byteUnits, true)} / ${formatBytes(stats.heap_size_limit, byteUnits)})!`);
+    }
+    if (this.lastHeapLogTime === null || (now - this.lastHeapLogTime) > (this.heapLogInterval * 1000)) {
+      logger.debug(`Memory usage: ${formatBytes(this.maxHeapSize, byteUnits)} / ${formatBytes(stats.heap_size_limit, byteUnits)}`);
+      this.warnedHeapCritical = false;
+      this.maxHeapSize = 0;
+      this.lastHeapLogTime = now;
+      this.server?.getConnections((error, count) => {
+        if (!error) {
+          logger.debug(`${count} open TCP sockets`);
+        }
+      });
+      this.serverUnixSocket?.getConnections((error, count) => {
+        if (!error) {
+          logger.debug(`${count} open unix sockets`);
+        }
+      });
+    }
+  }
+
+  forceExit(exitEvent, code?: number): void {
+    logger.debug(`triggering exit for signal: ${exitEvent}`);
+    if (code != null) {
+      // override the default exit code
+      process.exitCode = code;
+    }
+    process.exit();
+  }
+
+  exitCleanup(): void {
+    if (config.DATABASE.ENABLED) {
+      DB.releasePidLock();
+    }
+    this.server?.close();
+    this.serverUnixSocket?.close();
+    this.wss?.close();
+    if (this.wssUnixSocket) {
+      this.wssUnixSocket.close();
+    }
+  }
+}
+
+((): Server => new Server())();

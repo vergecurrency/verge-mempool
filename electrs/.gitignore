@@ -1,0 +1,16 @@
+target
+*db/
+*.log
+*.sublime*
+*~
+*.pyc
+.vscode
+*.core
+# Local investigation notes, including copies placed anywhere in this tree.
+ARCHITECTURE.md
+VERGE_COMPATIBILITY.md
+IMPLEMENTATION_PLAN.md
+architecture.md
+verge_compatibility.md
+implementation_plan.md
+.local/

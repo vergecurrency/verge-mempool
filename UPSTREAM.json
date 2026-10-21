@@ -1,0 +1,18 @@
+{
+  "mempool": {
+    "url": "https://github.com/mempool/mempool.git",
+    "revision": "7c1f9b6c0bc09f092bc6339c0c776bfb23773ac8",
+    "licenseFiles": ["mempool/COPYING.md", "mempool/LICENSE"]
+  },
+  "electrs": {
+    "url": "https://github.com/mempool/electrs.git",
+    "revision": "eda20be05708e7302a600202f2a082b91d038898",
+    "licenseFiles": ["electrs/LICENSE", "electrs/verge-wire/LICENSE", "electrs/verge-wire/NOTICE"]
+  },
+  "vergeAssets": {
+    "url": "https://github.com/vergecurrency/verge.git",
+    "revision": "da6a0fbc4e8095a108bec39f4fecf8560d9ef62c",
+    "notice": "mempool/frontend/src/resources/verge/NOTICE",
+    "license": "mempool/frontend/src/resources/verge/LICENSE-Verge-Core.txt"
+  }
+}

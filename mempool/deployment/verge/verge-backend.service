@@ -1,0 +1,26 @@
+[Unit]
+Description=Verge explorer backend
+After=network-online.target verge-indexer.service
+Wants=verge-indexer.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=verge-explorer
+Group=verge-explorer
+WorkingDirectory=/opt/verge-explorer/current/backend
+Environment=MEMPOOL_CONFIG_FILE=/etc/verge-explorer/backend.json
+ExecStart=/usr/bin/node --max-old-space-size=2048 /opt/verge-explorer/current/backend/dist/index.js
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/verge-explorer
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

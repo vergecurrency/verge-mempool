@@ -1,0 +1,8 @@
+Verge logo assets are copied unchanged from the read-only Verge Core checkout:
+  src/qt/res/src/verge.svg
+  src/qt/res/icons/verge.png
+  src/qt/res/icons/verge.ico
+Source revision: da6a0fbc4e8095a108bec39f4fecf8560d9ef62c.
+The accompanying Verge Core MIT notice is LICENSE-Verge-Core.txt.
+Verge names and marks identify the chain explored by this application.
+Mempool application code remains covered by its upstream AGPL license.

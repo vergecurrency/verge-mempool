@@ -1,0 +1,8 @@
+# ignore all differences in line endings
+package.json eol=crlf -crlf
+*/package.json eol=crlf -crlf
+
+# Linux entrypoints must retain executable shell line endings on Windows too.
+*.sh text eol=lf
+*.bash text eol=lf
+deployment/verge/source-excludes.txt text eol=lf

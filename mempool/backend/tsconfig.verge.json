@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "target": "es2020", "types": ["node"], "noEmit": true, "noImplicitAny": true },
+  "include": [
+    "src/api/verge/amounts.ts",
+    "src/api/verge/block-cache.ts",
+    "src/api/verge/block-stats.ts",
+    "src/api/verge/chain-profile.ts",
+    "src/api/verge/codec.ts",
+    "src/api/verge/electrum-utils.ts",
+    "src/api/verge/electrum-tls.ts",
+    "src/api/verge/electrum-probe.ts",
+    "src/api/verge/fee-policy.ts",
+    "src/api/verge/mining.ts",
+    "src/api/verge/rpc.ts",
+    "src/__tests__/verge/**/*.node.ts"
+  ]
+}

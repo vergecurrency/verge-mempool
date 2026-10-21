@@ -1,0 +1,261 @@
+{
+  "source": "Public Verge Core transaction fixtures collected during compatibility qualification; contains no private keys or credentials.",
+  "transactions": [
+    {
+      "name": "testnet-blocks-0-0",
+      "provenance": "Verge Core getblock verbosity 2; raw serialization checked against recorded block",
+      "txid": "2ebf7632df1eac8f32e205e6628a0508181f191c0a1ec0c57277c7bfee9e9765",
+      "hex": "010000007894d36a010000000000000000000000000000000000000000000000000000000000000000ffffffff2604ffff001d01041e564552474520544553544e455420524553455420323032362d31302d3137ffffffff0100000000000000000000000000",
+      "version": 1,
+      "time": 1792251000,
+      "locktime": 0,
+      "coinbase": true,
+      "vin": [
+        {
+          "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+          "vout": 4294967295,
+          "script": "04ffff001d01041e564552474520544553544e455420524553455420323032362d31302d3137",
+          "sequence": 4294967295
+        }
+      ],
+      "vout": [
+        {
+          "atoms": "0",
+          "script": ""
+        }
+      ]
+    },
+    {
+      "name": "testnet-blocks-1-0",
+      "provenance": "Verge Core getblock verbosity 2; raw serialization checked against recorded block",
+      "txid": "cbf391a2885fca46589afd99d49c4ea9d9cd4bd82f45d6144afb3da0fd82b0e3",
+      "hex": "01000000049ed76a010000000000000000000000000000000000000000000000000000000000000000ffffffff03510105ffffffff0100d0ed902e0000002321026833044d4754429da034024a466dab3041b84c4ee5c55fd171a844d5f486a5e9ac00000000",
+      "version": 1,
+      "time": 1792515588,
+      "locktime": 0,
+      "coinbase": true,
+      "vin": [
+        {
+          "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+          "vout": 4294967295,
+          "script": "510105",
+          "sequence": 4294967295
+        }
+      ],
+      "vout": [
+        {
+          "atoms": "200000000000",
+          "script": "21026833044d4754429da034024a466dab3041b84c4ee5c55fd171a844d5f486a5e9ac"
+        }
+      ]
+    },
+    {
+      "name": "testnet-blocks-100-0",
+      "provenance": "Verge Core getblock verbosity 2; raw serialization checked against recorded block",
+      "txid": "e71797b9782913fdfbae8ae9ee91249173493bf0a9f705bac4bc8d64f35ec3f9",
+      "hex": "01000000c2b3d76a010000000000000000000000000000000000000000000000000000000000000000ffffffff0401640104ffffffff0100d0ed902e000000232102a88010513d566688d4065f19d6e50fb2b246b265f95833fa783a88d8acaa5058ac00000000",
+      "version": 1,
+      "time": 1792521154,
+      "locktime": 0,
+      "coinbase": true,
+      "vin": [
+        {
+          "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+          "vout": 4294967295,
+          "script": "01640104",
+          "sequence": 4294967295
+        }
+      ],
+      "vout": [
+        {
+          "atoms": "200000000000",
+          "script": "2102a88010513d566688d4065f19d6e50fb2b246b265f95833fa783a88d8acaa5058ac"
+        }
+      ]
+    },
+    {
+      "name": "testnet-blocks-500-0",
+      "provenance": "Verge Core getblock verbosity 2; raw serialization checked against recorded block",
+      "txid": "476f62b92f0923fdb7b0f30266902b22329f797b1087a0aee8486a6f266d9fda",
+      "hex": "010000003108d86a010000000000000000000000000000000000000000000000000000000000000000ffffffff0502f4010103ffffffff0100d0ed902e0000002321032339374a2922a33052e181d8be53b5c6b5c372d6678d4c0761c0fa8688cf39d4ac00000000",
+      "version": 1,
+      "time": 1792542769,
+      "locktime": 0,
+      "coinbase": true,
+      "vin": [
+        {
+          "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+          "vout": 4294967295,
+          "script": "02f4010103",
+          "sequence": 4294967295
+        }
+      ],
+      "vout": [
+        {
+          "atoms": "200000000000",
+          "script": "21032339374a2922a33052e181d8be53b5c6b5c372d6678d4c0761c0fa8688cf39d4ac"
+        }
+      ]
+    },
+    {
+      "name": "regtest-blocks-722-0",
+      "provenance": "Verge Core getblock verbosity 2; raw serialization checked against recorded block",
+      "txid": "a1fba890abcd2262b2de017f106cf56ae28420f10e703a72b560f6e9c73447dd",
+      "hex": "010000004f3dd86a010000000000000000000000000000000000000000000000000000000000000000ffffffff0502d2020101ffffffff01a056ef902e00000023210345b2b0a724cf7cf6b88c2657a3e6afc4095bb65267ba21b6ab72dad2bda1d9f2ac00000000",
+      "version": 1,
+      "time": 1792556367,
+      "locktime": 0,
+      "coinbase": true,
+      "vin": [
+        {
+          "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+          "vout": 4294967295,
+          "script": "02d2020101",
+          "sequence": 4294967295
+        }
+      ],
+      "vout": [
+        {
+          "atoms": "200000100000",
+          "script": "210345b2b0a724cf7cf6b88c2657a3e6afc4095bb65267ba21b6ab72dad2bda1d9f2ac"
+        }
+      ]
+    },
+    {
+      "name": "regtest-blocks-722-1",
+      "provenance": "Verge Core getblock verbosity 2; raw serialization checked against recorded block",
+      "txid": "19c97ee539dfbe993e1b3db0f95c18a028b588c6bbf8564fa7cff15de87e003d",
+      "hex": "010000004f3dd86a01a35bd439b553d3714f265cb89b204fcba30fe2d7e56a8efc31979a6642a65272000000004847304402200afa90d05550ddf43589f4b7a7afad1731f7b9e3063bf308fa049f2541c15c2702207b8aec7f0d30d3df559247ac576fa01b1bfa379fab9d324ea6938e388f4ac80101feffffff0200ca9a3b00000000754c5956504201b5c0c2d00e31286e8eeeeb6b7f7cee9b224359963995cafc62bf93c5661e924002da7c75f92459de49198bc259ebacd5d709133b1266c5c4e34bf4815f4cbaa7414dca7b5fed361e9cb20b024cdd472b69851ea1587576a91453670e8cd8c7d1279a28833cbcc5f41f1fdf5aea88ac607f51552e0000001976a914f6ec0de24c0bd84629648d64196d962ad3548f4088acd1020000",
+      "version": 1,
+      "time": 1792556367,
+      "locktime": 721,
+      "coinbase": false,
+      "vin": [
+        {
+          "txid": "7252a642669a9731fc8e6ae5d7e20fa3cb4f209bb85c264f71d353b539d45ba3",
+          "vout": 0,
+          "script": "47304402200afa90d05550ddf43589f4b7a7afad1731f7b9e3063bf308fa049f2541c15c2702207b8aec7f0d30d3df559247ac576fa01b1bfa379fab9d324ea6938e388f4ac80101",
+          "sequence": 4294967294
+        }
+      ],
+      "vout": [
+        {
+          "atoms": "1000000000",
+          "script": "4c5956504201b5c0c2d00e31286e8eeeeb6b7f7cee9b224359963995cafc62bf93c5661e924002da7c75f92459de49198bc259ebacd5d709133b1266c5c4e34bf4815f4cbaa7414dca7b5fed361e9cb20b024cdd472b69851ea1587576a91453670e8cd8c7d1279a28833cbcc5f41f1fdf5aea88ac"
+        },
+        {
+          "atoms": "198999900000",
+          "script": "76a914f6ec0de24c0bd84629648d64196d962ad3548f4088ac"
+        }
+      ]
+    },
+    {
+      "name": "regtest-blocks-1500-0",
+      "provenance": "Verge Core getblock verbosity 2; raw serialization checked against recorded block",
+      "txid": "1a2fd30fff75f1bfa076d1a8ba776afec5c64e65c52dc1f9cf6444fa529b8368",
+      "hex": "58564705603ed86a00585647010000000000000000000000000000000000000000000000000000000000000000ffffffff0402dc0500ffffffff0200000000000000001976a9144dca7b5fed361e9cb20b024cdd472b69851ea15888ac0000000000000000a76a4ca4565043019a471031a8facc1e8604b0c9c5e031f8ab919ab6030fe765fef9069cfaf772c910a0236a0fdc754f280732b34aa8ed8d8bfeb4230cd095dbe651ae4360b016c4a79848fff37c5655d7156dc7893dc3bdabe0f0639ed1bd9dcee44e3bdec986a4fe9c388cc6a76e6e1ce6d2df27612f4038fbd40e58903be2a021a39cd9deb000a96a1ee159d91c397b408a7d9955718b0bbc23c8efd3f2541b7b7f3cbe7ad76700000000",
+      "version": 88561240,
+      "time": 1792556640,
+      "locktime": 0,
+      "coinbase": true,
+      "vin": [
+        {
+          "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+          "vout": 4294967295,
+          "script": "02dc0500",
+          "sequence": 4294967295
+        }
+      ],
+      "vout": [
+        {
+          "atoms": "0",
+          "script": "76a9144dca7b5fed361e9cb20b024cdd472b69851ea15888ac"
+        },
+        {
+          "atoms": "0",
+          "script": "6a4ca4565043019a471031a8facc1e8604b0c9c5e031f8ab919ab6030fe765fef9069cfaf772c910a0236a0fdc754f280732b34aa8ed8d8bfeb4230cd095dbe651ae4360b016c4a79848fff37c5655d7156dc7893dc3bdabe0f0639ed1bd9dcee44e3bdec986a4fe9c388cc6a76e6e1ce6d2df27612f4038fbd40e58903be2a021a39cd9deb000a96a1ee159d91c397b408a7d9955718b0bbc23c8efd3f2541b7b7f3cbe7ad767"
+        }
+      ]
+    },
+    {
+      "name": "regtest-blocks-1501-0",
+      "provenance": "Verge Core getblock verbosity 2; raw serialization checked against recorded block",
+      "txid": "81aeddd7eb284b7bf51fe5650f4da2966e51718c81413d434a7ea0d791963ffb",
+      "hex": "58564705704cd86a00585647010000000000000000000000000000000000000000000000000000000000000000ffffffff0402dd0500ffffffff0200000000000000001976a9144dca7b5fed361e9cb20b024cdd472b69851ea15888ac0000000000000000a76a4ca456504301ee44b9c136aa23b3e1e7f82579f5a324f914c66b5f68d8beefa600f4faabf9e06990186fb990d149cd66f8cad86a606e88ff4c339be163ff57b5c7e65252433fa79848fff37c5655d7156dc7893dc3bdabe0f0639ed1bd9dcee44e3bdec986a4fe9c388cc6a76e6e1ce6d2df27612f4038fbd40e58903be2a021a39cd9deb000d91d79122e7769a584f0a7b533782c9522dc3784715d94c29cdb49fdcdab363d00000000",
+      "version": 88561240,
+      "time": 1792560240,
+      "locktime": 0,
+      "coinbase": true,
+      "vin": [
+        {
+          "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+          "vout": 4294967295,
+          "script": "02dd0500",
+          "sequence": 4294967295
+        }
+      ],
+      "vout": [
+        {
+          "atoms": "0",
+          "script": "76a9144dca7b5fed361e9cb20b024cdd472b69851ea15888ac"
+        },
+        {
+          "atoms": "0",
+          "script": "6a4ca456504301ee44b9c136aa23b3e1e7f82579f5a324f914c66b5f68d8beefa600f4faabf9e06990186fb990d149cd66f8cad86a606e88ff4c339be163ff57b5c7e65252433fa79848fff37c5655d7156dc7893dc3bdabe0f0639ed1bd9dcee44e3bdec986a4fe9c388cc6a76e6e1ce6d2df27612f4038fbd40e58903be2a021a39cd9deb000d91d79122e7769a584f0a7b533782c9522dc3784715d94c29cdb49fdcdab363d"
+        }
+      ]
+    },
+    {
+      "name": "regtest-spends-1502-0",
+      "provenance": "Verge Core getblock verbosity 2; raw serialization checked against recorded block",
+      "txid": "28ead4ca4fb3fe14fa97218af71ed4e3785eb99f1f64362699c5e3d4f2df1f9a",
+      "hex": "58564705425cd86a00585647010000000000000000000000000000000000000000000000000000000000000000ffffffff0402de0500ffffffff02400d0300000000001976a914f80203f6f0554ace4a509a282afcece27a9bec8788ac0000000000000000a76a4ca456504301fb28d4e51d4a0e7cd40db21d39e8bceea20d948e72f66f273b956029b00ede4998a2d686b5e9f596d241e9f7f94dc1b0b785d213d26763064567be6c4c26bfeda79848fff37c5655d7156dc7893dc3bdabe0f0639ed1bd9dcee44e3bdec986a4d7ccdb846e5485beec444cdc1c104eadcf94a3b1e047816098d4b308e97ce076706108dfb15b4236be47ebd32aa90e416570f653f7c8be2d71069035a48cb29100000000",
+      "version": 88561240,
+      "time": 1792564290,
+      "locktime": 0,
+      "coinbase": true,
+      "vin": [
+        {
+          "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+          "vout": 4294967295,
+          "script": "02de0500",
+          "sequence": 4294967295
+        }
+      ],
+      "vout": [
+        {
+          "atoms": "200000",
+          "script": "76a914f80203f6f0554ace4a509a282afcece27a9bec8788ac"
+        },
+        {
+          "atoms": "0",
+          "script": "6a4ca456504301fb28d4e51d4a0e7cd40db21d39e8bceea20d948e72f66f273b956029b00ede4998a2d686b5e9f596d241e9f7f94dc1b0b785d213d26763064567be6c4c26bfeda79848fff37c5655d7156dc7893dc3bdabe0f0639ed1bd9dcee44e3bdec986a4d7ccdb846e5485beec444cdc1c104eadcf94a3b1e047816098d4b308e97ce076706108dfb15b4236be47ebd32aa90e416570f653f7c8be2d71069035a48cb291"
+        }
+      ]
+    },
+    {
+      "name": "regtest-spends-1502-1",
+      "provenance": "Verge Core getblock verbosity 2; raw serialization checked against recorded block",
+      "txid": "c01957a9a77b46f09a18c6306aad7f82be9f65e4fcca283bc2bba756b93c5adf",
+      "hex": "58564705324ed86a00585647013fd23fcf70912e4da4bd8180c10963e3a71f0f5cbb5be899ec035f51735db72b010000006b4830450221008faf784162e4daafb507d87bbf153799d7ea37071db3e6ced4528d3db37f406002203d0b78fab7c4fc5c5d1124399b718fe2a16665877bc09b94393fc3b0ace68522412102bd3cb33c9e0d293d5edf5f1e97268bac086a628ccabf25816b274c53469892f8fdffffff0120724e552e0000001976a91463f222fabc56d2ab740646ec2d8f695bdcf9f39d88ac00000000",
+      "version": 88561240,
+      "time": 1792560690,
+      "locktime": 0,
+      "coinbase": false,
+      "vin": [
+        {
+          "txid": "2bb75d73515f03ec99e85bbb5c0f1fa7e36309c18081bda44d2e9170cf3fd23f",
+          "vout": 1,
+          "script": "4830450221008faf784162e4daafb507d87bbf153799d7ea37071db3e6ced4528d3db37f406002203d0b78fab7c4fc5c5d1124399b718fe2a16665877bc09b94393fc3b0ace68522412102bd3cb33c9e0d293d5edf5f1e97268bac086a628ccabf25816b274c53469892f8",
+          "sequence": 4294967293
+        }
+      ],
+      "vout": [
+        {
+          "atoms": "198999700000",
+          "script": "76a91463f222fabc56d2ab740646ec2d8f695bdcf9f39d88ac"
+        }
+      ]
+    }
+  ]
+}
