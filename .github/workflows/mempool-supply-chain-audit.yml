@@ -1,0 +1,54 @@
+name: Mempool install-script audit
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - mempool/**
+      - .github/workflows/mempool-supply-chain-audit.yml
+      - .github/actions/**
+  pull_request:
+    paths:
+      - mempool/**
+      - .github/workflows/mempool-supply-chain-audit.yml
+      - .github/actions/**
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mempool
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.13.0
+          cache: npm
+          cache-dependency-path: |-
+            mempool/backend/package-lock.json
+            mempool/frontend/package-lock.json
+      - name: Use pinned npm
+        run: npm install --global npm@11.12.0 --no-audit --no-fund
+      - name: Audit allowed install scripts
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: bash "$PROJECT/meta/scripts/check-install-scripts.sh"
+    strategy:
+      matrix:
+        project:
+          - backend
+          - frontend

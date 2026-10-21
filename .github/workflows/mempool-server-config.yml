@@ -1,0 +1,50 @@
+name: Mempool server configuration
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - mempool/nginx*.conf
+      - mempool/http-basic.conf
+      - mempool/production/nginx/**
+      - mempool/.github/nginx-check/**
+      - mempool/deployment/verge/nginx.conf
+      - .github/workflows/mempool-server-config.yml
+  pull_request:
+    paths:
+      - mempool/nginx*.conf
+      - mempool/http-basic.conf
+      - mempool/production/nginx/**
+      - mempool/.github/nginx-check/**
+      - mempool/deployment/verge/nginx.conf
+      - .github/workflows/mempool-server-config.yml
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  nginx:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate the upstream production nginx configuration
+        run: |-
+          image="$(docker build -q -f mempool/.github/nginx-check/Dockerfile.production mempool/production)"
+          docker run --rm "$image"
+      - name: Validate the upstream container nginx configuration
+        run: |-
+          image="$(docker build -q -f mempool/.github/nginx-check/Dockerfile.docker mempool)"
+          docker run --rm "$image"
+      - name: Validate the Verge gateway nginx configuration
+        run: >-
+          docker run --rm --volume "$PWD/mempool/deployment/verge/nginx.conf:/etc/nginx/conf.d/default.conf:ro"
+          nginx:1.30.1-alpine nginx -t

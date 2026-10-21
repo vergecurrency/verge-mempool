@@ -1,0 +1,33 @@
+# Opt-in only. Configure PROJECT_TOKEN and the project-specific repository variable before running.
+name: mempool project board (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      item_url:
+        description: Issue or pull request URL to add to the configured organization project
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  project:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Add item to the configured organization project
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          PROJECT_NUMBER: ${{ vars.MEMPOOL_PROJECT_NUMBER }}
+          PROJECT_OWNER: ${{ github.repository_owner }}
+          ITEM_URL: ${{ inputs.item_url }}
+        run: >-
+          [[ "$PROJECT_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "Configure the project number repository variable first";
+          exit 1; }
+
+          gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --url "$ITEM_URL"

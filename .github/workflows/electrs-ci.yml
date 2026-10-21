@@ -1,0 +1,57 @@
+name: Electrs Verge CI
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - electrs/**
+      - .github/workflows/electrs-ci.yml
+      - .github/actions/**
+  pull_request:
+    paths:
+      - electrs/**
+      - .github/workflows/electrs-ci.yml
+      - .github/actions/**
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: electrs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install native build dependencies
+        run: |-
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends build-essential clang libclang-dev cmake pkg-config
+      - name: Set up pinned Rust
+        uses: ./.github/actions/ci-rust-setup
+        with:
+          working-directory: electrs
+          cache-name: electrs
+          components: rustfmt,clippy
+      - name: Check formatting, all supported feature combinations and Verge wire tests
+        run: INCLUDE_TESTS=1 bash scripts/checks.sh --locked
+      - name: Upstream Bitcoin library tests
+        run: cargo test --locked --lib
+      - name: Build the production Verge indexer
+        run: cargo build --locked --release --features verge --bin electrs
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      CXXFLAGS: '-g0'

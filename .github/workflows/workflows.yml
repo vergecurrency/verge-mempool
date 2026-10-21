@@ -1,0 +1,50 @@
+name: Workflow validation
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/**
+  pull_request:
+    paths:
+      - .github/**
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  actionlint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned actionlint and validate workflows
+        run: >-
+          version=1.7.12
+
+          asset=actionlint_1.7.12_linux_amd64.tar.gz
+
+          directory="$RUNNER_TEMP/actionlint"
+
+          mkdir -p "$directory"
+
+          curl --fail --location --proto '=https'
+          "https://github.com/rhysd/actionlint/releases/download/v$version/$asset" --output "$directory/$asset"
+
+          curl --fail --location --proto '=https'
+          "https://github.com/rhysd/actionlint/releases/download/v$version/actionlint_1.7.12_checksums.txt" --output
+          "$directory/checksums.txt"
+
+          (cd "$directory" && grep "  $asset$" checksums.txt | sha256sum --check --strict -)
+
+          tar --extract --gzip --file "$directory/$asset" --directory "$directory" actionlint
+
+          "$directory/actionlint" -color .github/workflows/*.yml

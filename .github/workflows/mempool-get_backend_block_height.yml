@@ -1,0 +1,46 @@
+name: Verge explorer live health (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      explorer_url:
+        description: Verge explorer gateway URL
+        required: true
+        type: string
+      network:
+        description: Expected Verge network
+        required: true
+        type: choice
+        default: mainnet
+        options:
+          - mainnet
+          - testnet
+          - regtest
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  health:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mempool
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.13.0
+      - name: Check canonical HTTP and WebSocket state
+        env:
+          EXPLORER_URL: ${{ inputs.explorer_url }}
+          VERGE_NETWORK: ${{ inputs.network }}
+        run: node deployment/verge/check-live.cjs --url="$EXPLORER_URL" --network="$VERGE_NETWORK"

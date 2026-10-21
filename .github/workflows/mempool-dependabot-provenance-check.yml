@@ -1,43 +1,42 @@
-name: Dependabot Provenance Check
-
+name: Mempool Dependabot provenance
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - mempool/**
+      - .github/workflows/mempool-dependabot-provenance-check.yml
 permissions:
   contents: read
   pull-requests: write
   issues: write
-
 jobs:
   check-provenance:
     if: >-
-      github.event.pull_request.user.login == 'dependabot[bot]' &&
-      !contains(github.event.pull_request.labels.*.name, 'provenance-exception')
+      github.event.pull_request.user.login == 'dependabot[bot]' && !contains(github.event.pull_request.labels.*.name,
+      'provenance-exception')
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Fetch Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98
         with:
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
-
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Node
         if: steps.metadata.outputs.package-ecosystem == 'npm_and_yarn'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: "24.13.0"
-
+          node-version: 24.13.0
       - name: Check npm provenance attestation
         if: steps.metadata.outputs.package-ecosystem == 'npm_and_yarn'
         id: npm-provenance
         run: |
-          IFS=',' read -ra DEPS <<< "${{ steps.metadata.outputs.dependency-names }}"
-          UPDATED_DEPS_JSON='${{ steps.metadata.outputs.updated-dependencies-json }}'
+          IFS=',' read -ra DEPS <<< "$DEPENDENCY_NAMES"
+
 
           FAILED_DEPS=""
           for DEP in "${DEPS[@]}"; do
@@ -71,30 +70,51 @@ jobs:
           else
             echo "failed=false" >> "$GITHUB_OUTPUT"
           fi
-
+        env:
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          UPDATED_DEPS_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
       - name: Warn if provenance check failed
         if: steps.npm-provenance.outputs.failed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FAILED_DEPS: ${{ steps.npm-provenance.outputs.failed-deps }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
+        run: >
           COMMENT_BODY_FILE="$(mktemp)"
+
           cat > "$COMMENT_BODY_FILE" <<EOF
+
           ## ⚠️⚠️ Provenance Attestation Check Failed ⚠️⚠️
-          
-          The following dependencies do not have [provenance attestation](https://docs.npmjs.com/generating-provenance-statements):
-          
+
+
+          The following dependencies do not have [provenance
+          attestation](https://docs.npmjs.com/generating-provenance-statements):
+
+
           **Failed:** $FAILED_DEPS
-          
+
+
           ### What is provenance attestation?
-          
-          Provenance attestation cryptographically proves that a package was built from a specific source repository using a specific build process. This helps protect against supply chain attacks by verifying the link between published packages and their source code.
-          
+
+
+          Provenance attestation cryptographically proves that a package was built from a specific source repository
+          using a specific build process. This helps protect against supply chain attacks by verifying the link between
+          published packages and their source code.
+
+
           ### What to do
-          
+
+
           - Check if a newer version of the dependency publishes provenance
-          - Contact the package maintainer to request [npm provenance](https://docs.npmjs.com/generating-provenance-statements) support
+
+          - Contact the package maintainer to request [npm
+          provenance](https://docs.npmjs.com/generating-provenance-statements) support
+
           EOF
-          
+
+
           gh pr comment "$PR_NUMBER" --body-file "$COMMENT_BODY_FILE"
+defaults:
+  run:
+    shell: bash
+    working-directory: mempool

@@ -1,0 +1,49 @@
+name: Mempool database integration
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - mempool/**
+      - .github/workflows/mempool-backend-integration.yml
+      - .github/actions/**
+  pull_request:
+    paths:
+      - mempool/**
+      - .github/workflows/mempool-backend-integration.yml
+      - .github/actions/**
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mempool/backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up backend
+        uses: ./.github/actions/setup-backend
+      - name: Build backend
+        run: npm run build
+      - name: Run MariaDB integration tests
+        run: npm run test:integration
+      - name: Database logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.test.yml logs
+      - name: Clean up test database
+        if: always()
+        run: docker compose -f docker-compose.test.yml down --volumes
+    env:
+      MEMPOOL_CONFIG_FILE: ${{ github.workspace }}/mempool/backend/mempool-config.test.json

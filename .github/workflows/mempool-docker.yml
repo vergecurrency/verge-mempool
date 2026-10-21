@@ -1,0 +1,37 @@
+# Upstream container compatibility only. Verge production uses deployment/verge/build-linux.sh.
+# Publishing is disabled until Verge container images have been qualified.
+name: Mempool upstream container compatibility (manual)
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: mempool
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+      - name: Prepare upstream container contexts
+        run: sh docker/init.sh
+      - name: Build upstream frontend container
+        run: >-
+          docker buildx build --platform linux/amd64 --load --tag mempool-frontend:ci --build-arg
+          "commitHash=$GITHUB_SHA" frontend/
+      - name: Build upstream backend container
+        run: >-
+          docker buildx build --platform linux/amd64 --load --tag mempool-backend:ci --build-context rustgbt=./rust
+          --build-context backend=./backend --build-arg "commitHash=$GITHUB_SHA" backend/

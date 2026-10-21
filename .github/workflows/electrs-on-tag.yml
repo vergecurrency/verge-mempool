@@ -1,0 +1,27 @@
+# Manual build only; registry publishing requires a separately qualified release process.
+name: Electrs Verge container (manual)
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
+      - name: Build the Verge indexer container
+        run: >-
+          docker buildx build --platform linux/amd64 --file electrs/Dockerfile --build-arg "CARGO_EXTRA_ARGS=--locked
+          --features verge" --load --tag verge-electrs:ci electrs

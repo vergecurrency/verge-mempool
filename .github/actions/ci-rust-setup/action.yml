@@ -1,0 +1,52 @@
+name: CI Rust setup
+description: Install the selected project toolchain and cache its Cargo dependencies.
+inputs:
+  working-directory:
+    description: Project directory relative to the repository root
+    default: electrs
+  cache-name:
+    description: Cache namespace; leave empty to disable caching
+    default: ''
+  targets:
+    description: Additional Rust targets
+    default: ''
+  components:
+    description: Additional Rust components
+    default: ''
+  toolchain:
+    description: Override the project rust-toolchain pin
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Read the project toolchain pin
+      id: pin
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        REQUESTED_TOOLCHAIN: ${{ inputs.toolchain }}
+      run: |-
+        toolchain="$REQUESTED_TOOLCHAIN"
+        if [[ -z "$toolchain" ]]; then
+          toolchain="$(tr -d '\r\n' < rust-toolchain)"
+        fi
+        [[ -n "$toolchain" ]]
+        printf 'toolchain=%s\n' "$toolchain" >> "$GITHUB_OUTPUT"
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
+      with:
+        toolchain: ${{ steps.pin.outputs.toolchain }}
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
+    - name: Cache Cargo dependencies
+      if: inputs.cache-name != ''
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: |-
+          ~/.cargo/registry
+          ~/.cargo/git
+          ${{ inputs.working-directory }}/target
+          ${{ inputs.working-directory }}/verge-wire/target
+        key: >-
+          ${{ runner.os }}-${{ runner.arch }}-cargo-${{ inputs.cache-name }}-${{ steps.pin.outputs.toolchain }}-${{
+          hashFiles(format('{0}/**/Cargo.lock', inputs.working-directory)) }}

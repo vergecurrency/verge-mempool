@@ -1,0 +1,43 @@
+name: Verge backend build information (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      explorer_url:
+        description: Verge explorer gateway URL
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  information:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.13.0
+      - name: Read backend build information
+        env:
+          EXPLORER_URL: ${{ inputs.explorer_url }}
+        run: >-
+          node <<'NODE'
+
+          const url = new URL(process.env.EXPLORER_URL);
+
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash)
+          throw Error('Use an HTTP(S) gateway URL without credentials, query or fragment');
+
+          if (!url.pathname.endsWith('/')) url.pathname += '/';
+
+          fetch(new URL('api/v1/backend-info', url), { signal: AbortSignal.timeout(10000) })
+            .then(response => { if (!response.ok) throw Error('HTTP ' + response.status); return response.json(); })
+            .then(result => console.log(JSON.stringify(result, null, 2)))
+            .catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE

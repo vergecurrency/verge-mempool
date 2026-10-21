@@ -1,0 +1,86 @@
+name: Mempool Verge CI
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - mempool/**
+      - .github/workflows/mempool-ci.yml
+      - .github/actions/**
+  pull_request:
+    paths:
+      - mempool/**
+      - .github/workflows/mempool-ci.yml
+      - .github/actions/**
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mempool/backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up backend
+        uses: ./.github/actions/setup-backend
+      - name: Build backend
+        run: npm run build
+      - name: Check Verge types
+        run: npm run typecheck:verge
+      - name: Verge regression tests
+        run: npm run test:verge
+      - name: Upstream unit tests
+        run: npm run test:ci -- --runInBand --forceExit
+      - name: Lint backend
+        run: npm run lint
+      - name: Validate generated Docker configuration JSON
+        working-directory: mempool/docker/backend
+        run: |-
+          sed '$d' start.sh > start_ci.sh
+          sh start_ci.sh
+          jq empty mempool-config.json
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mempool/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.13.0
+          cache: npm
+          cache-dependency-path: mempool/frontend/package-lock.json
+      - name: Use pinned npm
+        run: npm install --global npm@11.12.0 --no-audit --no-fund
+      - name: Audit frontend install scripts
+        run: bash meta/scripts/check-install-scripts.sh
+      - name: Install locked frontend dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Verge frontend regression tests
+        run: npm run test:verge
+      - name: Lint frontend
+        run: npm run lint
+      - name: Build the production Verge frontend
+        run: npm run build:verge:production
+    env:
+      CYPRESS_INSTALL_BINARY: '0'
+      NG_BUILD_MAX_WORKERS: '2'
+      NODE_OPTIONS: '--max-old-space-size=6144'
