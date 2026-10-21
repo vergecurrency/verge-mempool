@@ -14,6 +14,14 @@ set -e
 # if you already have release mode compiled, as
 # it will be faster to use the version you already compiled
 
+# Keep dependency resolution locked, including when callers already pass --locked.
+CARGO_ARGS=(--locked)
+for argument in "$@"; do
+    if [[ "$argument" != --locked ]]; then
+        CARGO_ARGS+=("$argument")
+    fi
+done
+
 TESTNAME=""
 cleanup() {
     exit_code=$?
@@ -26,7 +34,7 @@ trap cleanup EXIT
 
 TESTNAME="Running Verge wire crate check"
 echo "$TESTNAME"
-cargo check --manifest-path verge-wire/Cargo.toml "$@" -q --locked
+cargo check "${CARGO_ARGS[@]}" --manifest-path verge-wire/Cargo.toml -q
 
 TESTNAME="Running Verge wire crate format check"
 echo "$TESTNAME"
@@ -34,20 +42,20 @@ cargo fmt --manifest-path verge-wire/Cargo.toml -q --all -- --check
 
 TESTNAME="Running Verge wire crate clippy check"
 echo "$TESTNAME"
-cargo clippy --manifest-path verge-wire/Cargo.toml "$@" -q --locked --all-targets -- -D warnings
+cargo clippy "${CARGO_ARGS[@]}" --manifest-path verge-wire/Cargo.toml -q --all-targets -- -D warnings
 
 if [ "${INCLUDE_TESTS:-}" ]; then
     TESTNAME="Running Verge wire crate tests"
     echo "$TESTNAME"
-    cargo test --manifest-path verge-wire/Cargo.toml "$@" -q --locked
+    cargo test "${CARGO_ARGS[@]}" --manifest-path verge-wire/Cargo.toml -q
 fi
 
 TESTNAME="Running cargo check"
 echo "$TESTNAME"
-cargo check "$@" -q --features liquid,electrum-discovery
+cargo check "${CARGO_ARGS[@]}" -q --features liquid,electrum-discovery
 TESTNAME="Running Verge server check"
 echo "$TESTNAME"
-cargo check "$@" -q --features verge
+cargo check "${CARGO_ARGS[@]}" -q --features verge
 
 TESTNAME="Running cargo fmt check"
 echo "$TESTNAME"
@@ -64,29 +72,29 @@ cargo fmt -q --all -- --check
 
 TESTNAME="Running cargo clippy check no features"
 echo "$TESTNAME"
-cargo clippy $@ -q
+cargo clippy "${CARGO_ARGS[@]}" -q
 
 TESTNAME="Running cargo clippy check electrum-discovery"
 echo "$TESTNAME"
-cargo clippy $@ -q -F electrum-discovery
+cargo clippy "${CARGO_ARGS[@]}" -q -F electrum-discovery
 
 TESTNAME="Running cargo clippy check liquid"
 echo "$TESTNAME"
-cargo clippy $@ -q -F liquid
+cargo clippy "${CARGO_ARGS[@]}" -q -F liquid
 
 TESTNAME="Running cargo clippy check electrum-discovery + liquid"
 echo "$TESTNAME"
-cargo clippy $@ -q -F electrum-discovery,liquid
+cargo clippy "${CARGO_ARGS[@]}" -q -F electrum-discovery,liquid
 
 TESTNAME="Running cargo clippy check Verge"
 echo "$TESTNAME"
-cargo clippy "$@" -q -F verge
+cargo clippy "${CARGO_ARGS[@]}" -q -F verge
 
-if [ $INCLUDE_TESTS ]; then
+if [ "${INCLUDE_TESTS:-}" ]; then
     TESTNAME="Running cargo test with Liquid and discovery"
     echo "$TESTNAME"
-    cargo test "$@" -q --lib --features liquid,electrum-discovery
+    cargo test "${CARGO_ARGS[@]}" -q --lib --features liquid,electrum-discovery
     TESTNAME="Running cargo test with Verge"
     echo "$TESTNAME"
-    cargo test "$@" -q --lib --features verge
+    cargo test "${CARGO_ARGS[@]}" -q --lib --features verge
 fi

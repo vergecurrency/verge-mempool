@@ -1,5 +1,5 @@
 name: Set up Mempool backend
-description: Build the locked Linux native addon and install the backend from its lockfile.
+description: Build the locked Linux native addon and install backend dependencies; run ci-rust-setup for mempool/rust/gbt first.
 runs:
   using: composite
   steps:
@@ -12,11 +12,6 @@ runs:
     - name: Use pinned npm
       run: npm install --global npm@11.12.0 --no-audit --no-fund
       shell: bash
-    - name: Set up native addon Rust
-      uses: ./.github/actions/ci-rust-setup
-      with:
-        working-directory: mempool/rust/gbt
-        cache-name: backend-native
     - name: Build the native addon
       shell: bash
       working-directory: mempool/rust/gbt
