@@ -17,6 +17,7 @@ use elements::{
     AssetId,
 };
 
+use crate::util::sync_progress::{SyncMetrics, SyncProgress};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::convert::TryInto;
 use std::path::Path;
@@ -43,6 +44,7 @@ use crate::elements::{asset, peg};
 use super::{db::ReverseScanGroupIterator, fetch::bitcoind_sequential_fetcher};
 
 const MIN_HISTORY_ITEMS_TO_CACHE: usize = 100;
+const MARKER_BATCH_SIZE: usize = 4_096;
 
 pub struct Store {
     // TODO: should be column families
@@ -54,22 +56,34 @@ pub struct Store {
 
 impl Store {
     pub fn open(path: &Path, config: &Config) -> Self {
+        let opening = SyncProgress::new("open_databases", Some(3), "databases");
         let txstore_db = DB::open(&path.join("txstore"), config);
+        opening.update(1, 0, 0, None);
 
         let history_db = DB::open(&path.join("history"), config);
+        opening.update(2, 0, 0, None);
 
         let cache_db = DB::open(&path.join("cache"), config);
+        opening.update(3, 0, 0, None);
+        opening.finish();
 
         let headers = if let Some(tip_hash) = txstore_db.get(b"t") {
             let tip_hash = deserialize(&tip_hash).expect("invalid chain tip in `t`");
-            HeaderList::new(
+            let progress = SyncProgress::new("load_persisted_headers", None, "headers");
+            let mut loaded = 0;
+            let headers = HeaderList::new(
                 |hash| {
-                    txstore_db
+                    let header = txstore_db
                         .get(&BlockRow::header_key(full_hash(&hash[..])))
-                        .map(|raw| deserialize(&raw).expect("failed to parse BlockHeader"))
+                        .map(|raw| deserialize(&raw).expect("failed to parse BlockHeader"));
+                    loaded += usize::from(header.is_some());
+                    progress.update(loaded, 0, 0, None);
+                    header
                 },
                 tip_hash,
-            )
+            );
+            progress.finish();
+            headers
         } else {
             HeaderList::empty()
         };
@@ -173,6 +187,7 @@ pub struct Indexer {
     iconfig: IndexerConfig,
     duration: HistogramVec,
     tip_metric: Gauge,
+    sync_metrics: SyncMetrics,
 }
 
 struct IndexerConfig {
@@ -234,6 +249,7 @@ impl Indexer {
                 &["step"],
             ),
             tip_metric: metrics.gauge(MetricOpts::new("tip_height", "Current chain tip height")),
+            sync_metrics: SyncMetrics::new(metrics),
         }
     }
 
@@ -241,38 +257,50 @@ impl Indexer {
         self.duration.with_label_values(&[name]).start_timer()
     }
 
-    fn headers_to_add(&self, new_headers: &[HeaderEntry]) -> Vec<HeaderEntry> {
-        new_headers
-            .iter()
-            .filter(|e| {
-                !self
-                    .store
-                    .txstore_db
-                    .contains(&BlockRow::done_key(full_hash(&e.hash()[..])))
-            })
-            .cloned()
-            .collect()
+    fn missing_headers(
+        db: &DB,
+        headers: &[HeaderEntry],
+        phase: &'static str,
+        metrics: &SyncMetrics,
+    ) -> Result<Vec<HeaderEntry>> {
+        let progress = SyncProgress::with_metrics(phase, Some(headers.len()), "markers", metrics);
+        let mut missing = Vec::new();
+        let mut scanned = 0;
+        for batch in headers.chunks(MARKER_BATCH_SIZE) {
+            let keys: Vec<_> = batch
+                .iter()
+                .map(|entry| BlockRow::done_key(full_hash(&entry.hash()[..])))
+                .collect();
+            let present = db
+                .contains_many(&keys)
+                .chain_err(|| format!("failed {phase} completion-marker lookup"))?;
+            missing.extend(
+                batch
+                    .iter()
+                    .zip(present)
+                    .filter(|(_, present)| !present)
+                    .map(|(entry, _)| entry.clone()),
+            );
+            scanned += batch.len();
+            progress.update(
+                scanned,
+                scanned - missing.len(),
+                0,
+                batch.last().map(HeaderEntry::height),
+            );
+        }
+        progress.finish();
+        Ok(missing)
     }
 
-    fn headers_to_index(&self, new_headers: &[HeaderEntry]) -> Vec<HeaderEntry> {
-        new_headers
-            .iter()
-            .filter(|e| {
-                !self
-                    .store
-                    .history_db
-                    .contains(&BlockRow::done_key(full_hash(&e.hash()[..])))
-            })
-            .cloned()
-            .collect()
-    }
-
-    fn start_auto_compactions(&self, db: &DB) {
+    fn start_auto_compactions(&self, db: &DB, phase: &'static str) {
         let key = b"F".to_vec();
         if db.get(&key).is_none() {
+            let progress = SyncProgress::with_metrics(phase, None, "items", &self.sync_metrics);
             db.full_compaction();
             db.put_sync(&key, b"");
             assert!(db.get(&key).is_some());
+            progress.finish();
         }
         db.enable_auto_compaction();
     }
@@ -282,7 +310,7 @@ impl Indexer {
         let result = daemon.get_new_headers(&headers, tip)?;
 
         if let Some(tip) = result.last() {
-            info!("{:?} ({} left to index)", tip, result.len());
+            info!("captured chain target {:?}; {} headers to check against persisted transaction/history markers", tip, result.len());
         };
         Ok(result)
     }
@@ -360,32 +388,78 @@ impl Indexer {
             headers_len
         };
 
-        let to_add = self.headers_to_add(&new_headers);
+        let to_add = Self::missing_headers(
+            &self.store.txstore_db,
+            &new_headers,
+            "scan_transaction_markers",
+            &self.sync_metrics,
+        )?;
         debug!(
             "adding transactions from {} blocks using {:?}",
             to_add.len(),
             self.from
         );
-        start_fetcher(self.from, &daemon, to_add)?
-            .map(|blocks| self.add(&blocks, Operation::AddBlocks));
-        self.start_auto_compactions(&self.store.txstore_db);
+        let progress = SyncProgress::with_metrics(
+            "index_transactions",
+            Some(to_add.len()),
+            "blocks",
+            &self.sync_metrics,
+        );
+        let (mut processed, mut transactions) = (0, 0);
+        start_fetcher(self.from, &daemon, to_add)?.map(|blocks| {
+            self.add(&blocks, Operation::AddBlocks);
+            processed += blocks.len();
+            transactions += blocks.iter().map(|b| b.block.txdata.len()).sum::<usize>();
+            progress.update(
+                processed,
+                0,
+                transactions,
+                blocks.last().map(|b| b.entry.height()),
+            );
+        });
+        progress.finish();
+        self.start_auto_compactions(&self.store.txstore_db, "compact_transactions");
 
-        let to_index = self.headers_to_index(&new_headers);
+        let to_index = Self::missing_headers(
+            &self.store.history_db,
+            &new_headers,
+            "scan_history_markers",
+            &self.sync_metrics,
+        )?;
         debug!(
             "indexing history from {} blocks using {:?}",
             to_index.len(),
             self.from
         );
-        start_fetcher(self.from, &daemon, to_index)?
-            .map(|blocks| self.index(&blocks, Operation::AddBlocks));
-        self.start_auto_compactions(&self.store.history_db);
-        self.start_auto_compactions(&self.store.cache_db);
+        let progress = SyncProgress::with_metrics(
+            "index_address_history",
+            Some(to_index.len()),
+            "blocks",
+            &self.sync_metrics,
+        );
+        let (mut processed, mut transactions) = (0, 0);
+        start_fetcher(self.from, &daemon, to_index)?.map(|blocks| {
+            self.index(&blocks, Operation::AddBlocks);
+            processed += blocks.len();
+            transactions += blocks.iter().map(|b| b.block.txdata.len()).sum::<usize>();
+            progress.update(
+                processed,
+                0,
+                transactions,
+                blocks.last().map(|b| b.entry.height()),
+            );
+        });
+        progress.finish();
+        self.start_auto_compactions(&self.store.history_db, "compact_history");
+        self.start_auto_compactions(&self.store.cache_db, "compact_cache");
 
         if let DBFlush::Disable = self.flush {
-            debug!("flushing to disk");
+            let progress =
+                SyncProgress::with_metrics("flush_index", None, "items", &self.sync_metrics);
             self.store.txstore_db.flush();
             self.store.history_db.flush();
             self.flush = DBFlush::Enable;
+            progress.finish();
         }
 
         // update the synced tip *after* the new data is flushed to disk
@@ -397,6 +471,7 @@ impl Indexer {
         }
 
         self.tip_metric.set(headers_len as i64 - 1);
+        info!("index update committed: height={} hash={}; transaction and address-history passes complete and flushed; checking Core again for newer blocks", headers_len - 1, tip);
 
         Ok(tip)
     }
@@ -446,16 +521,20 @@ impl Indexer {
         let rows = {
             let _timer = self.start_timer("index_process");
             if let Operation::AddBlocks = op {
-                for b in blocks {
+                let keys: Vec<_> = blocks
+                    .iter()
+                    .map(|b| BlockRow::done_key(full_hash(&b.entry.hash()[..])))
+                    .collect();
+                let present =
+                    self.store.txstore_db.contains_many(&keys).expect(
+                        "failed to verify stored transaction markers before history indexing",
+                    );
+                for (b, present) in blocks.iter().zip(present) {
                     if b.entry.height() % 10_000 == 0 {
                         info!("History indexing is up to height={}", b.entry.height());
                     }
                     let blockhash = b.entry.hash();
-                    if !self
-                        .store
-                        .txstore_db
-                        .contains(&BlockRow::done_key(full_hash(&blockhash[..])))
-                    {
+                    if !present {
                         panic!("cannot index block {} (missing from store)", blockhash);
                     }
                 }
@@ -1832,6 +1911,49 @@ impl BlockRow {
 #[cfg(test)]
 mod import_marker_tests {
     use super::*;
+
+    #[cfg(not(feature = "liquid"))]
+    #[test]
+    fn marker_batches_resume_each_pass_independently_in_header_order() {
+        let directory = tempfile::tempdir().unwrap();
+        let metrics = Metrics::new("127.0.0.1:0".parse().unwrap());
+        let metrics = SyncMetrics::new(&metrics);
+        let headers: Vec<_> = (0..MARKER_BATCH_SIZE * 2 + 17)
+            .map(|height| {
+                let mut raw = [0_u8; 80];
+                raw[76..80].copy_from_slice(&(height as u32).to_le_bytes());
+                HeaderEntry::new(height, deserialize(&raw).unwrap())
+            })
+            .collect();
+        for (name, modulus) in [("txstore", 3), ("history", 5)] {
+            let path = directory.path().join(name);
+            {
+                let db = DB::open_test(&path);
+                let rows = headers
+                    .iter()
+                    .filter(|entry| entry.height() % modulus == 0)
+                    .map(|entry| BlockRow::new_done(full_hash(&entry.hash()[..])).into_row())
+                    .collect();
+                db.write(rows, DBFlush::Enable);
+            }
+            // Reopen with incomplete and different transaction/history passes.
+            let db = DB::open_test(&path);
+            let actual = Indexer::missing_headers(&db, &headers, name, &metrics).unwrap();
+            let expected: Vec<_> = headers
+                .iter()
+                .filter(|entry| entry.height() % modulus != 0)
+                .cloned()
+                .collect();
+            assert_eq!(actual, expected);
+            assert!(
+                !db.contains(b"t"),
+                "a marker scan must not publish a synced tip"
+            );
+            assert!(Indexer::missing_headers(&db, &[], name, &metrics)
+                .unwrap()
+                .is_empty());
+        }
+    }
 
     #[test]
     fn completion_lookup_keeps_the_existing_serialized_key_format() {

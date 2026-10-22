@@ -1,5 +1,6 @@
 mod block;
 mod script;
+pub(crate) mod sync_progress;
 mod transaction;
 
 pub mod bincode_util;

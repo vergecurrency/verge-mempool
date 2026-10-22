@@ -21,6 +21,7 @@ use crate::chain::{Block, BlockHash, BlockHeader, Network, Transaction, Txid};
 use crate::config::BITCOIND_SUBVER;
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
 use crate::signal::Waiter;
+use crate::util::sync_progress::SyncProgress;
 use crate::util::{HeaderEntry, HeaderList};
 
 use crate::errors::*;
@@ -271,6 +272,7 @@ where
     let mut height = target_height;
     let mut hash = target;
     let mut suffix = Vec::new();
+    let progress = SyncProgress::new("verify_header_ancestry", None, "headers");
     loop {
         if let Some(entry) = height.checked_sub(base_height).and_then(|i| headers.get(i)) {
             if *entry.hash() == hash {
@@ -283,6 +285,7 @@ where
         assert_eq!(*entry.hash(), hash);
         hash = entry.header().prev_blockhash;
         suffix.push(entry);
+        progress.update(suffix.len(), 0, 0, Some(height));
         if height == 0 {
             assert_eq!(hash, BlockHash::all_zeros());
             headers.clear();
@@ -293,6 +296,7 @@ where
     }
     headers.extend(suffix.into_iter().rev());
     assert_eq!(*headers.last().unwrap().hash(), target);
+    progress.finish();
     Ok(())
 }
 
@@ -307,6 +311,7 @@ where
     F: FnMut(&BlockHash) -> Result<BlockHeader>,
 {
     let mut result: Vec<HeaderEntry> = Vec::new();
+    let progress = SyncProgress::new("download_headers", Some(tip_height + 1), "headers");
     for start in (0..=tip_height).step_by(RPC_BATCH_SIZE) {
         let end = start.saturating_add(RPC_BATCH_SIZE).min(tip_height + 1);
         let heights: Vec<usize> = (start..end).collect();
@@ -342,14 +347,23 @@ where
             );
             result.push(HeaderEntry::new(height, header));
         }
+        progress.update(result.len(), 0, 0, result.last().map(HeaderEntry::height));
     }
     reconcile_header_suffix(&mut result, tip, tip_height, &mut fetch_header)?;
+    progress.update(result.len(), 0, 0, result.last().map(HeaderEntry::height));
+    progress.finish();
+    let verification = SyncProgress::new("validate_header_links", Some(result.len()), "headers");
     let mut blockhash = BlockHash::all_zeros();
-    for header in &result {
+    for (position, header) in result.iter().enumerate() {
         assert_eq!(header.header().prev_blockhash, blockhash);
         blockhash = *header.hash();
+        if position % RPC_BATCH_SIZE == 0 {
+            verification.update(position + 1, 0, 0, Some(header.height()));
+        }
     }
     assert_eq!(blockhash, tip);
+    verification.update(result.len(), 0, 0, result.last().map(HeaderEntry::height));
+    verification.finish();
     Ok(result)
 }
 
@@ -1112,6 +1126,7 @@ impl Daemon {
             bestblockhash,
         );
         let mut new_headers = vec![];
+        let progress = SyncProgress::new("fetch_new_headers", None, "headers");
         let null_hash = BlockHash::all_zeros();
         let mut blockhash = *bestblockhash;
         while blockhash != null_hash {
@@ -1123,6 +1138,7 @@ impl Daemon {
                 .chain_err(|| format!("failed to get {} header", blockhash))?;
             blockhash = header.prev_blockhash;
             new_headers.push(header);
+            progress.update(new_headers.len(), 0, 0, None);
         }
         trace!("downloaded {} block headers", new_headers.len());
         new_headers.reverse(); // so the tip is the last vector entry
@@ -1130,6 +1146,7 @@ impl Daemon {
         if let Some(last) = ordered.last() {
             assert_eq!(*last.hash(), *bestblockhash);
         }
+        progress.finish();
         Ok(ordered)
     }
 

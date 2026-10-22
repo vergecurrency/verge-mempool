@@ -24,7 +24,7 @@ Cargo builds pinned Rust dependencies and native RocksDB from source; no Windows
 Use a synchronized, unpruned Verge node. `txindex=0` is supported. Cookie authentication is preferred; do not publish credentials. The daemon directory is the base directory, before the network's `testnet3` or `regtest` suffix.
 
 ```sh
-./target/release/electrs --network testnet \
+./target/release/electrs -vv --network testnet \
   --daemon-dir /srv/verge \
   --daemon-rpc-addr 127.0.0.1:20104 \
   --db-dir /srv/verge-index \
@@ -46,6 +46,119 @@ The tested Mempool connection uses `MEMPOOL.CHAIN=verge`, `MEMPOOL.BACKEND=elect
 Linux retains Unix sockets, SIGUSR1 notification and process metrics. Windows supports TCP development listeners and omits Linux `/proc` metrics/Unix sockets. A Windows test does not qualify Linux deployment.
 
 ## Controlled acceptance
+
+### Following synchronization
+
+Use `-vv` for INFO progress (included in the deployment service template). With
+systemd, follow the actual installed unit using `journalctl -fu verge-indexer`.
+Existing units need their logging flag updated separately; installing new source
+does not change an installed unit automatically. Keep the node's actual daemon
+directory and cookie permissions when adapting the template.
+
+Each phase emits a start, a heartbeat every five seconds while it is active,
+and a finish or interruption record. Progress is phase-local:
+
+| Phase | Meaning of processed / total |
+| --- | --- |
+| `open_databases` | Opened transaction, history and cache databases / 3 |
+| `load_persisted_headers` | Headers loaded from the published tip's ancestry / unknown |
+| `download_headers` | Heights retrieved / captured target height plus genesis |
+| `verify_header_ancestry` | Suffix headers retrieved during ancestry repair / unknown |
+| `validate_header_links` | Header links checked / captured chain length |
+| `fetch_new_headers` | New headers retrieved on subsequent updates / unknown |
+| `scan_transaction_markers` | Transaction completion keys checked / candidate headers |
+| `index_transactions` | Missing blocks stored / missing transaction blocks |
+| `compact_transactions` | Transaction compaction; total and percentage unknown |
+| `scan_history_markers` | History completion keys checked / candidate headers |
+| `index_address_history` | Blocks whose address/spend history was written / missing history blocks |
+| `compact_history`, `compact_cache` | Compaction; total and percentage unknown |
+| `flush_index` | Final initial-import flush; total and percentage unknown |
+
+Records also include `rate_per_s`, `elapsed_s`, `idle_s`, `last_height`, and the
+transaction count for block-writing passes. Marker scans report `reused` and
+`missing_blocks`: missing means absent among the markers checked so far. Scan
+`remaining` counts unchecked markers, not blocks left to download. An empty
+persisted marker is complete. A blocked call keeps the count unchanged while
+elapsed/idle time increases. ETA is a rough average for that phase only; it is
+unknown before measurable progress, for phases without totals, and after 15
+seconds without progress. It is never a predicted time for the whole explorer.
+Compaction can be expensive even while its processed count is zero.
+
+The loopback monitoring endpoint is available before query servers start:
+
+```sh
+curl -fsS http://127.0.0.1:14224/metrics
+```
+
+`index_sync_processed`, `index_sync_total`, `index_sync_reused` and
+`index_sync_active` have a bounded `phase` label for marker, block-writing,
+compaction and flush phases. Unknown totals are -1; active is 1 during a phase
+and 0 after finish/interruption. Counters are gauges reset per phase run, not
+ever-increasing lifetime totals. Header/open phases are reported in logs.
+`tip_height` still represents only the committed indexed tip. None of these
+progress counters publishes an incomplete address index as synchronized.
+
+After both index passes and flushing, startup compares the committed hash with
+Core again and catches up before starting REST/Electrum query servers. The log
+announces that transition explicitly. Core can advance again afterwards; normal
+live polling and the backend's readiness checks still apply. This transition
+does not establish that public Apache/TLS/backend deployment is healthy.
+
+### Measuring a slow completion-marker scan
+
+Marker probes use RocksDB's optimized batched MultiGet in groups of at most
+4,096, preserving header order and propagating read errors. The shared block
+cache retains its 64 MiB budget with four shards, so large unpartitioned SST
+index blocks have larger capacity pools. This is a runtime cache setting, not
+an SST format change. It requires neither deleting the index nor migrating
+completion keys. The shared write-buffer budget remains 128 MiB.
+
+An opt-in benchmark compares individual versus batched probes and 64 versus
+four cache shards. It asserts identical ordered presence results in all modes,
+uses fresh caches, and runs three rounds with alternating mode order. To run
+the small synthetic fixture on Linux:
+
+```sh
+cargo fmt
+cargo test --locked --release --lib --features verge marker_lookup_benchmark \
+  -- --ignored --nocapture
+```
+
+The synthetic fixture deliberately scales table blocks and cache size to
+exercise metadata fragmentation: 48 overlapping files, 128-byte table blocks,
+and an 8 MiB cache explicitly set to 64 or four shards. It is not the default
+cache configuration at that size and is not a mainnet throughput prediction.
+
+For production qualification, prepare the candidate binary and tests first.
+Arrange a maintenance window, stop only the indexer cleanly and confirm its
+process has exited. Copy the entire index to a separate destination on a
+filesystem with enough space. Never copy active RocksDB files individually or
+place the benchmark marker in the live index. Keep an untouched stopped backup
+for rollback. In the **copy only**, mark the parent of `txstore`:
+
+```sh
+# Replace this example with the verified absolute path to the STOPPED COPY.
+touch /srv/benchmark-copy/verge-mainnet-v1/newindex/BENCHMARK_COPY_ONLY
+ELECTRS_MARKER_BENCH_COPY=/srv/benchmark-copy/verge-mainnet-v1/newindex/txstore \
+  cargo test --locked --release --lib --features verge marker_lookup_benchmark \
+  -- --ignored --nocapture
+```
+
+The benchmark opens the selected copy read-only, samples up to 2,048 persisted
+markers across the hash range and adds equally many random probes. It compares
+all modes at the production 64 MiB cache budget and prints elapsed time,
+keys/second, cache usage and index-block hit/miss statistics. The marker file
+is an operator guard, not automatic proof that the path is a safe copy.
+Do not flush the host OS page cache on a production server. This measures a
+sampled startup lookup workload; separately measure sustained concurrent query
+latency and total RSS/swap during indexing and live operation.
+
+Keep the same network, full database path and index options when replacing the
+binary. Retain the old executable and stopped backup, and preserve all marker,
+header and history records. Compare progress, RSS/swap, scan rate and new block
+RPC activity before claiming that the mainnet bottleneck is resolved. Avoid
+repeated diagnostic restarts: a historical import without a published tip must
+retrieve headers again on each startup.
 
 ### Resuming a historical import
 

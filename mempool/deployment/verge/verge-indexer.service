@@ -8,7 +8,7 @@ StartLimitIntervalSec=0
 Type=simple
 User=verge-explorer
 Group=verge-explorer
-ExecStart=/opt/verge-explorer/current/bin/electrs --network=mainnet --daemon-dir=/var/lib/verge --daemon-rpc-addr=127.0.0.1:20102 --db-dir=/var/lib/verge-explorer/index --jsonrpc-import --http-addr=127.0.0.1:3001 --electrum-rpc-addr=127.0.0.1:60001 --monitoring-addr=127.0.0.1:14224 --main-loop-delay=500
+ExecStart=/opt/verge-explorer/current/bin/electrs -vv --network=mainnet --daemon-dir=/var/lib/verge --daemon-rpc-addr=127.0.0.1:20102 --db-dir=/var/lib/verge-explorer/index --jsonrpc-import --http-addr=127.0.0.1:3001 --electrum-rpc-addr=127.0.0.1:60001 --monitoring-addr=127.0.0.1:14224 --main-loop-delay=500
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=120

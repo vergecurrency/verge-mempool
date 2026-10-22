@@ -44,13 +44,25 @@ async function until(label, predicate) {
 }
 function pass(name) { checks.push(name); console.log(`PASS ${name}`); }
 async function startIndex(extra = []) {
-  const log = fs.openSync(path.join(directory, `index-${sequence++}.log`), 'w');
+  const logPath = path.join(directory, `index-${sequence++}.log`);
+  const log = fs.openSync(logPath, 'w');
   indexer = spawn(binary, indexArgs(extra), { windowsHide: true, stdio: ['ignore', log, log] });
   fs.closeSync(log);
   const tip = await rpc('getbestblockhash');
   await until('index tip', async () => (await get('blocks/tip/hash', 'text')) === tip);
+  await until('query startup status', () => fs.readFileSync(logPath, 'utf8').includes('live chain/mempool synchronization active'));
+  const status = fs.readFileSync(logPath, 'utf8');
+  for (const phase of ['scan_transaction_markers', 'index_transactions', 'scan_history_markers', 'index_address_history', 'flush_index']) {
+    assert.match(status, new RegExp(`sync phase=${phase} state=finished `));
+  }
+  assert.ok(status.indexOf('phase=flush_index state=finished') < status.indexOf('index update committed:'));
+  assert.ok(status.indexOf('index update committed:') < status.indexOf('initial chain catch-up complete'));
+  assert.ok(status.indexOf('initial chain catch-up complete') < status.indexOf('live chain/mempool synchronization active'));
+  const metrics = await (await fetch(`http://127.0.0.1:${monitoringPort}/metrics`)).text();
+  assert.match(metrics, /index_sync_processed\{phase="scan_transaction_markers"\} \d+/);
+  assert.match(metrics, /index_sync_active\{phase="index_address_history"\} 0/);
 }
-function indexArgs(extra = []) { return ['--network=regtest', `--daemon-dir=${datadir}`, `--daemon-rpc-addr=127.0.0.1:${rpcPort}`, `--http-addr=127.0.0.1:${httpPort}`, `--electrum-rpc-addr=127.0.0.1:${electrumPort}`, `--monitoring-addr=127.0.0.1:${monitoringPort}`, `--db-dir=${directory}`, '--main-loop-delay=100', '-v', ...extra]; }
+function indexArgs(extra = []) { return ['--network=regtest', `--daemon-dir=${datadir}`, `--daemon-rpc-addr=127.0.0.1:${rpcPort}`, `--http-addr=127.0.0.1:${httpPort}`, `--electrum-rpc-addr=127.0.0.1:${electrumPort}`, `--monitoring-addr=127.0.0.1:${monitoringPort}`, `--db-dir=${directory}`, '--main-loop-delay=100', '-vv', ...extra]; }
 async function rejectsConfiguration(args, pattern, name) {
   const file = path.join(directory, `${name}.log`); const log = fs.openSync(file, 'w');
   const child = spawn(binary, args, { windowsHide: true, stdio: ['ignore', log, log] }); fs.closeSync(log);

@@ -62,6 +62,18 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         &metrics,
     );
     let mut tip = indexer.update(&daemon)?;
+    loop {
+        let current_tip = daemon.getbestblockhash()?;
+        if current_tip == tip {
+            break;
+        }
+        info!("Core advanced during indexing: indexed={} current={}; catching up before starting query servers", tip, current_tip);
+        tip = indexer.update(&daemon)?;
+    }
+    info!(
+        "initial chain catch-up complete at {}; preparing mempool before starting query servers",
+        tip
+    );
 
     let chain = Arc::new(ChainQuery::new(
         Arc::clone(&store),
@@ -107,6 +119,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
     // TODO: configuration for which servers to start
     let rest_server = rest::start(Arc::clone(&config), Arc::clone(&query), &metrics);
     let electrum_server = ElectrumRPC::start(Arc::clone(&config), Arc::clone(&query), &metrics);
+    info!("REST and Electrum query servers started at indexed tip {}; live chain/mempool synchronization active", tip);
 
     if let Some(ref precache_file) = config.precache_scripts {
         let precache_scripthashes = precache::scripthashes_from_file(precache_file.to_string())
@@ -143,8 +156,7 @@ fn run_server(config: Arc<Config>) -> Result<()> {
         // Index new blocks
         let current_tip = daemon.getbestblockhash()?;
         if current_tip != tip {
-            indexer.update(&daemon)?;
-            tip = current_tip;
+            tip = indexer.update(&daemon)?;
         };
 
         // Update mempool
