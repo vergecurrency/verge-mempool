@@ -47,6 +47,47 @@ Linux retains Unix sockets, SIGUSR1 notification and process metrics. Windows su
 
 ## Controlled acceptance
 
+### Resuming a historical import
+
+The reorg-safe, lower-memory importer keeps the existing database version,
+network fingerprint, header encoding and block-completion keys. Stop the old
+indexer cleanly, retain its entire database directory, and replace only the
+indexer binary built with the same locked dependencies and `--features verge`.
+Restart with the existing flags and directory; do not delete or recreate the
+database. A database backup made while the service is stopped remains advisable.
+
+An interrupted initial import reuses persisted completion markers, including
+empty marker values. Transaction and history passes still complete and flush
+before publishing the synchronized tip. If no complete import tip has yet been
+published, startup still downloads the header chain again; it does not discard
+the already persisted block/transaction/history records or mark an incomplete
+history as synchronized.
+
+Initial header requests use groups of at most 1,000 heights and unique RPC IDs.
+Replies are associated by ID, and raw header IDs are checked against their
+requested hashes. If active-chain height lookups cross a reorganization, only
+the affected suffix is reconstructed by parent hashes. The captured tip remains
+the exact required final hash; all link and hash assertions remain enabled.
+If a height becomes unavailable, verified hash ancestry provides a fallback.
+The regular next update handles any further change to Core's active chain.
+
+Header entries share immutable storage instead of cloning full headers into
+each import list. Completed block sets stay in RocksDB rather than duplicated
+in memory, and restart loads only the persisted tip's ancestry rather than
+building a map of all stored headers. The three RocksDB stores share a 128 MiB
+write-buffer budget and a 64 MiB block cache, with 32 MiB individual write
+buffers and bounded open-table counts. These budgets are not a cap on total
+process RSS: chain metadata, allocations, native DB bookkeeping and queued
+blocks also consume memory. Monitor mainnet peak memory and throughput on the
+deployment host; more swap is not a substitute for that qualification.
+
+Regression coverage includes the public mainnet sibling blocks at height
+9,550,376, a reorg during a height batch, unavailable heights, invalid hash
+responses, shuffled/duplicate/missing RPC IDs, interruption, shared header
+storage, and reopening partial database records without a synchronized tip.
+
+### Isolated regression chain
+
 Use a fresh, separately started, disposable regtest node with no peers, loopback RPC and `txindex=0`:
 
 ```sh

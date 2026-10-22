@@ -1,6 +1,7 @@
 use rocksdb;
 
 use std::path::Path;
+use std::sync::LazyLock;
 
 use crate::config::Config;
 use crate::util::{bincode_util, Bytes};
@@ -10,6 +11,12 @@ use crate::util::{bincode_util, Bytes};
 // 1 = Original DB (since fork from Blockstream)
 // 2 = Add tx position to TxHistory rows and place Spending before Funding
 static DB_VERSION: u32 = 2;
+
+// Shared by txstore, history and cache, rather than multiplied per database.
+static WRITE_BUFFERS: LazyLock<rocksdb::WriteBufferManager> =
+    LazyLock::new(|| rocksdb::WriteBufferManager::new_write_buffer_manager(128 << 20, true));
+static BLOCK_CACHE: LazyLock<rocksdb::Cache> =
+    LazyLock::new(|| rocksdb::Cache::new_lru_cache(64 << 20));
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct DBRow {
@@ -269,6 +276,17 @@ impl DB {
         self.db.get(key).unwrap().map(|v| v.to_vec())
     }
 
+    pub fn contains(&self, key: &[u8]) -> bool {
+        self.db.get_pinned(key).unwrap().is_some()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn open_test(path: &Path) -> Self {
+        Self {
+            db: open_raw_db(path, OpenMode::ReadWrite),
+        }
+    }
+
     fn verify_compatibility(&self, config: &Config) {
         let mut compatibility_bytes = bincode_util::serialize_little(&DB_VERSION).unwrap();
         #[cfg(feature = "verge")]
@@ -318,19 +336,22 @@ pub fn open_raw_db<T: rocksdb::ThreadMode>(
     debug!("opening DB at {:?}", path);
     let mut db_opts = rocksdb::Options::default();
     db_opts.create_if_missing(true);
-    db_opts.set_max_open_files(100_000); // TODO: make sure to `ulimit -n` this process correctly
+    db_opts.set_max_open_files(512);
     db_opts.set_compaction_style(rocksdb::DBCompactionStyle::Level);
     db_opts.set_compression_type(rocksdb::DBCompressionType::None);
     db_opts.set_target_file_size_base(1_073_741_824);
-    db_opts.set_write_buffer_size(256 << 20);
+    db_opts.set_write_buffer_size(32 << 20);
+    db_opts.set_max_write_buffer_number(2);
+    db_opts.set_write_buffer_manager(&WRITE_BUFFERS);
+    let mut block_opts = rocksdb::BlockBasedOptions::default();
+    block_opts.set_block_cache(&BLOCK_CACHE);
+    block_opts.set_cache_index_and_filter_blocks(true);
+    db_opts.set_block_based_table_factory(&block_opts);
     db_opts.set_disable_auto_compactions(true); // for initial bulk load
 
     // db_opts.set_advise_random_on_open(???);
     db_opts.set_compaction_readahead_size(1 << 20);
     db_opts.increase_parallelism(2);
-
-    // let mut block_opts = rocksdb::BlockBasedOptions::default();
-    // block_opts.set_block_size(???);
 
     match read_mode {
         OpenMode::ReadOnly => {
@@ -340,5 +361,45 @@ pub fn open_raw_db<T: rocksdb::ThreadMode>(
         OpenMode::ReadWrite => {
             rocksdb::DBWithThreadMode::<T>::open(&db_opts, path).expect("failed to open RocksDB")
         }
+    }
+}
+
+#[cfg(test)]
+mod persistence_tests {
+    use super::*;
+
+    #[test]
+    fn partial_import_rows_and_empty_done_markers_survive_reopen() {
+        let directory = tempfile::tempdir().unwrap();
+        let key = [b"D".as_slice(), &[42_u8; 32]].concat();
+        let version = bincode_util::serialize_little(&DB_VERSION).unwrap();
+        {
+            let db = DB::open_test(directory.path());
+            db.put_sync(b"V", &version);
+            db.write(
+                vec![
+                    DBRow {
+                        key: key.clone(),
+                        value: vec![],
+                    },
+                    DBRow {
+                        key: b"preserved".to_vec(),
+                        value: b"history".to_vec(),
+                    },
+                ],
+                DBFlush::Disable,
+            );
+            db.flush();
+            assert!(db.contains(&key));
+            assert!(!db.contains(b"t"));
+        }
+        let db = DB::open_test(directory.path());
+        assert_eq!(db.get(b"V"), Some(version));
+        assert_eq!(db.get(b"preserved"), Some(b"history".to_vec()));
+        assert!(db.contains(&key));
+        assert!(!db.contains(b"t"));
+        db.delete(vec![key.clone()]);
+        assert!(!db.contains(&key));
+        assert_eq!(WRITE_BUFFERS.get_buffer_size(), 128 << 20);
     }
 }

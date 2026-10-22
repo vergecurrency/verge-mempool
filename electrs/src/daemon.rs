@@ -10,7 +10,6 @@ use base64;
 use bitcoin::hashes::Hash;
 use glob;
 use hex;
-use itertools::Itertools;
 use serde_json::{from_str, from_value, Value};
 
 #[cfg(not(feature = "liquid"))]
@@ -22,9 +21,337 @@ use crate::chain::{Block, BlockHash, BlockHeader, Network, Transaction, Txid};
 use crate::config::BITCOIND_SUBVER;
 use crate::metrics::{HistogramOpts, HistogramVec, Metrics};
 use crate::signal::Waiter;
-use crate::util::HeaderList;
+use crate::util::{HeaderEntry, HeaderList};
 
 use crate::errors::*;
+
+const RPC_BATCH_SIZE: usize = 1_000;
+
+#[cfg(test)]
+mod import_tests {
+    use super::*;
+
+    #[test]
+    fn batches_match_unique_ids_instead_of_response_order() {
+        let ordered = ordered_batch_replies(
+            json!([
+                {"id": 8, "result": "second", "error": null},
+                {"id": 7, "result": "first", "error": null}
+            ]),
+            &[7, 8],
+        )
+        .unwrap();
+        assert_eq!(
+            parse_jsonrpc_reply(ordered[0].clone(), "test", 7).unwrap(),
+            "first"
+        );
+        assert_eq!(
+            parse_jsonrpc_reply(ordered[1].clone(), "test", 8).unwrap(),
+            "second"
+        );
+        assert!(ordered_batch_replies(json!([{"id": 7}, {"id": 7}]), &[7, 8]).is_err());
+        assert!(ordered_batch_replies(json!([{"id": 7}]), &[7, 8]).is_err());
+        assert!(ordered_batch_replies(json!([{"id": 7}, {"id": 9}]), &[7, 8]).is_err());
+    }
+
+    #[cfg(not(feature = "liquid"))]
+    fn child(parent: BlockHash, nonce: u32) -> BlockHeader {
+        let mut raw = [0_u8; 80];
+        raw[..4].copy_from_slice(&1_i32.to_le_bytes());
+        raw[4..36].copy_from_slice(&parent.to_byte_array());
+        raw[76..80].copy_from_slice(&nonce.to_le_bytes());
+        deserialize(&raw).unwrap()
+    }
+
+    #[cfg(not(feature = "liquid"))]
+    #[test]
+    fn initial_import_keeps_original_tip_during_reorg() {
+        let genesis = child(BlockHash::all_zeros(), 0);
+        let old = child(genesis.block_hash(), 1);
+        let replacement = child(genesis.block_hash(), 2);
+        let result = download_all_headers(
+            old.block_hash(),
+            1,
+            |_| Ok(vec![genesis.clone(), replacement.clone()]),
+            |hash| {
+                assert_eq!(*hash, old.block_hash());
+                Ok(old.clone())
+            },
+        )
+        .unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(*result[1].hash(), old.block_hash());
+        assert_eq!(result[1].header().prev_blockhash, *result[0].hash());
+    }
+
+    #[cfg(not(feature = "liquid"))]
+    #[test]
+    fn initial_import_repairs_a_reorg_inside_a_height_batch() {
+        let genesis = child(BlockHash::all_zeros(), 0);
+        let old = child(genesis.block_hash(), 1);
+        let replacement = child(genesis.block_hash(), 2);
+        let tip = child(replacement.block_hash(), 3);
+        let mut repairs = 0;
+        let result = download_all_headers(
+            tip.block_hash(),
+            2,
+            |_| Ok(vec![genesis.clone(), old.clone(), tip.clone()]),
+            |hash| {
+                repairs += 1;
+                assert_eq!(*hash, replacement.block_hash());
+                Ok(replacement.clone())
+            },
+        )
+        .unwrap();
+        assert_eq!(repairs, 1);
+        assert_eq!(*result[1].hash(), replacement.block_hash());
+        assert_eq!(*result[2].hash(), tip.block_hash());
+    }
+
+    #[cfg(not(feature = "liquid"))]
+    #[test]
+    fn missing_active_height_falls_back_to_verified_pinned_ancestry() {
+        let genesis = child(BlockHash::all_zeros(), 0);
+        let tip = child(genesis.block_hash(), 1);
+        let result = download_all_headers(
+            tip.block_hash(),
+            1,
+            |_| Err("active height temporarily unavailable".into()),
+            |hash| {
+                if *hash == tip.block_hash() {
+                    Ok(tip.clone())
+                } else {
+                    assert_eq!(*hash, genesis.block_hash());
+                    Ok(genesis.clone())
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(*result[0].hash(), genesis.block_hash());
+        assert_eq!(*result[1].hash(), tip.block_hash());
+    }
+
+    #[test]
+    fn interrupted_import_does_not_restart_via_hash_fallback() {
+        let result = download_all_headers(
+            BlockHash::all_zeros(),
+            0,
+            |_| Err(ErrorKind::Interrupt(15).into()),
+            |_| panic!("must honor interruption"),
+        );
+        assert!(matches!(
+            result.unwrap_err().kind(),
+            ErrorKind::Interrupt(15)
+        ));
+    }
+
+    #[cfg(not(feature = "liquid"))]
+    #[test]
+    fn initial_import_batches_are_bounded() {
+        let count = RPC_BATCH_SIZE + 3;
+        let mut chain = Vec::new();
+        let mut prev = BlockHash::all_zeros();
+        for nonce in 0..count {
+            let header = child(prev, nonce as u32);
+            prev = header.block_hash();
+            chain.push(header);
+        }
+        let mut requests = 0;
+        let imported = download_all_headers(
+            prev,
+            count - 1,
+            |heights| {
+                assert!(heights.len() <= RPC_BATCH_SIZE);
+                requests += 1;
+                Ok(heights
+                    .iter()
+                    .map(|height| chain[*height].clone())
+                    .collect())
+            },
+            |_| panic!("unchanged chain must not refetch a suffix"),
+        )
+        .unwrap();
+        assert_eq!(requests, 2);
+        assert_eq!(imported.len(), count);
+        assert_eq!(*imported.last().unwrap().hash(), prev);
+    }
+
+    #[cfg(feature = "verge")]
+    fn captured() -> Vec<(usize, BlockHeader)> {
+        let fixture: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/mainnet-reorg-9550376.json"))
+                .unwrap();
+        fixture["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|block| {
+                let raw = hex::decode(block["header"].as_str().unwrap()).unwrap();
+                let header: BlockHeader = deserialize(&raw).unwrap();
+                assert_eq!(
+                    header.block_hash().to_string(),
+                    block["hash"].as_str().unwrap()
+                );
+                (block["height"].as_u64().unwrap() as usize, header)
+            })
+            .collect()
+    }
+
+    #[cfg(feature = "verge")]
+    #[test]
+    fn real_mainnet_reorg_repairs_only_suffix_and_preserves_pinned_tip() {
+        let blocks = captured();
+        for (from, to) in [(1, 2), (2, 1)] {
+            let parent = HeaderEntry::new(blocks[0].0, blocks[0].1.clone());
+            let mut imported = vec![
+                parent.clone(),
+                HeaderEntry::new(blocks[from].0, blocks[from].1.clone()),
+            ];
+            let mut requests = 0;
+            reconcile_header_suffix(
+                &mut imported,
+                blocks[to].1.block_hash(),
+                blocks[to].0,
+                &mut |hash| {
+                    requests += 1;
+                    assert_eq!(*hash, blocks[to].1.block_hash());
+                    Ok(blocks[to].1.clone())
+                },
+            )
+            .unwrap();
+            assert_eq!(requests, 1);
+            assert!(std::ptr::eq(imported[0].header(), parent.header()));
+            assert_eq!(*imported[1].hash(), blocks[to].1.block_hash());
+            assert_eq!(imported[1].header().prev_blockhash, *parent.hash());
+        }
+    }
+
+    #[cfg(feature = "verge")]
+    #[test]
+    #[should_panic(expected = "assertion `left == right` failed")]
+    fn incorrect_header_still_fails_hash_assertion() {
+        let blocks = captured();
+        let mut headers = vec![HeaderEntry::new(blocks[0].0, blocks[0].1.clone())];
+        reconcile_header_suffix(
+            &mut headers,
+            blocks[1].1.block_hash(),
+            blocks[1].0,
+            &mut |_| Ok(blocks[2].1.clone()),
+        )
+        .unwrap();
+    }
+}
+
+fn ordered_batch_replies(replies: Value, ids: &[u64]) -> Result<Vec<Value>> {
+    let mut replies = match replies {
+        Value::Array(replies) if replies.len() == ids.len() => replies,
+        _ => bail!("RPC batch response count does not match request count"),
+    };
+    replies.sort_unstable_by_key(|reply| reply.get("id").and_then(Value::as_u64));
+    for (reply, id) in replies.iter().zip(ids) {
+        if reply.get("id").and_then(Value::as_u64) != Some(*id) {
+            bail!("missing, duplicate or unexpected RPC response id");
+        }
+    }
+    Ok(replies)
+}
+
+// Keep the requested hash as the anchor when height lookups cross a reorg.
+fn reconcile_header_suffix<F>(
+    headers: &mut Vec<HeaderEntry>,
+    target: BlockHash,
+    target_height: usize,
+    fetch: &mut F,
+) -> Result<()>
+where
+    F: FnMut(&BlockHash) -> Result<BlockHeader>,
+{
+    let base_height = headers.first().map_or(0, HeaderEntry::height);
+    let mut height = target_height;
+    let mut hash = target;
+    let mut suffix = Vec::new();
+    loop {
+        if let Some(entry) = height.checked_sub(base_height).and_then(|i| headers.get(i)) {
+            if *entry.hash() == hash {
+                headers.truncate(height - base_height + 1);
+                break;
+            }
+        }
+        let header = fetch(&hash)?;
+        let entry = HeaderEntry::new(height, header);
+        assert_eq!(*entry.hash(), hash);
+        hash = entry.header().prev_blockhash;
+        suffix.push(entry);
+        if height == 0 {
+            assert_eq!(hash, BlockHash::all_zeros());
+            headers.clear();
+            break;
+        }
+        assert_ne!(hash, BlockHash::all_zeros());
+        height -= 1;
+    }
+    headers.extend(suffix.into_iter().rev());
+    assert_eq!(*headers.last().unwrap().hash(), target);
+    Ok(())
+}
+
+fn download_all_headers<R, F>(
+    tip: BlockHash,
+    tip_height: usize,
+    mut fetch_range: R,
+    mut fetch_header: F,
+) -> Result<Vec<HeaderEntry>>
+where
+    R: FnMut(&[usize]) -> Result<Vec<BlockHeader>>,
+    F: FnMut(&BlockHash) -> Result<BlockHeader>,
+{
+    let mut result: Vec<HeaderEntry> = Vec::new();
+    for start in (0..=tip_height).step_by(RPC_BATCH_SIZE) {
+        let end = start.saturating_add(RPC_BATCH_SIZE).min(tip_height + 1);
+        let heights: Vec<usize> = (start..end).collect();
+        let headers = match fetch_range(&heights) {
+            Ok(headers) => headers,
+            Err(error) => {
+                if matches!(error.kind(), ErrorKind::Interrupt(_)) {
+                    return Err(error);
+                }
+                warn!(
+                    "height-based header fetch failed; following verified ancestry of {}: {}",
+                    tip, error
+                );
+                reconcile_header_suffix(&mut result, tip, tip_height, &mut fetch_header)?;
+                break;
+            }
+        };
+        assert_eq!(headers.len(), heights.len());
+        for (height, header) in heights.into_iter().zip(headers) {
+            let previous = result.last().map_or(BlockHash::all_zeros(), |h| *h.hash());
+            if header.prev_blockhash != previous && height > 0 {
+                reconcile_header_suffix(
+                    &mut result,
+                    header.prev_blockhash,
+                    height - 1,
+                    &mut fetch_header,
+                )?;
+            }
+            assert_eq!(result.len(), height);
+            assert_eq!(
+                header.prev_blockhash,
+                result.last().map_or(BlockHash::all_zeros(), |h| *h.hash())
+            );
+            result.push(HeaderEntry::new(height, header));
+        }
+    }
+    reconcile_header_suffix(&mut result, tip, tip_height, &mut fetch_header)?;
+    let mut blockhash = BlockHash::all_zeros();
+    for header in &result {
+        assert_eq!(header.header().prev_blockhash, blockhash);
+        blockhash = *header.hash();
+    }
+    assert_eq!(blockhash, tip);
+    Ok(result)
+}
 
 fn parse_hash<T>(value: &Value) -> Result<T>
 where
@@ -474,43 +801,39 @@ impl Daemon {
         params_list: &[Value],
         failure_threshold: f64,
     ) -> Result<Vec<Value>> {
-        let id = self.message_id.next();
-        let chunks = params_list
-            .iter()
-            .map(|params| json!({"method": method, "params": params, "id": id}))
-            .chunks(50_000); // Max Amount of batched requests
         let mut results = vec![];
         let total_requests = params_list.len();
         let mut failed_requests: u64 = 0;
         let threshold = (failure_threshold * total_requests as f64).round() as u64;
         let mut n = 0;
 
-        for chunk in &chunks {
-            let reqs = chunk.collect();
-            let mut replies = self.call_jsonrpc(method, &reqs)?;
-            if let Some(replies_vec) = replies.as_array_mut() {
-                for reply in replies_vec {
-                    n += 1;
-                    match parse_jsonrpc_reply(reply.take(), method, id) {
-                        Ok(parsed_reply) => results.push(parsed_reply),
-                        Err(e) => {
-                            failed_requests += 1;
-                            warn!(
-                                "batch request {} {}/{} failed: {}",
-                                method,
-                                n,
-                                total_requests,
-                                e.to_string()
-                            );
-                            // abort and return the last error once a threshold number of requests have failed
-                            if failed_requests > threshold {
-                                return Err(e);
-                            }
+        for chunk in params_list.chunks(RPC_BATCH_SIZE) {
+            let ids: Vec<u64> = chunk.iter().map(|_| self.message_id.next()).collect();
+            let reqs: Vec<Value> = chunk
+                .iter()
+                .zip(&ids)
+                .map(|(params, id)| json!({"method": method, "params": params, "id": id}))
+                .collect();
+            let replies = ordered_batch_replies(self.call_jsonrpc(method, &json!(reqs))?, &ids)?;
+            for (reply, id) in replies.into_iter().zip(ids) {
+                n += 1;
+                match parse_jsonrpc_reply(reply, method, id) {
+                    Ok(parsed_reply) => results.push(parsed_reply),
+                    Err(e) => {
+                        failed_requests += 1;
+                        warn!(
+                            "batch request {} {}/{} failed: {}",
+                            method,
+                            n,
+                            total_requests,
+                            e.to_string()
+                        );
+                        // abort and return the last error once a threshold number of requests have failed
+                        if failed_requests > threshold {
+                            return Err(e);
                         }
                     }
                 }
-            } else {
-                bail!("non-array replies: {:?}", replies);
             }
         }
 
@@ -569,22 +892,36 @@ impl Daemon {
     }
 
     pub fn getblockheader(&self, blockhash: &BlockHash) -> Result<BlockHeader> {
-        header_from_value(self.request(
+        self.signal.wait(Duration::ZERO, false)?;
+        let header = header_from_value(self.request(
             "getblockheader",
             json!([blockhash.to_string(), /*verbose=*/ false]),
-        )?)
+        )?)?;
+        assert_eq!(header.block_hash(), *blockhash);
+        Ok(header)
     }
 
     pub fn getblockheaders(&self, heights: &[usize]) -> Result<Vec<BlockHeader>> {
+        self.signal.wait(Duration::ZERO, false)?;
         let heights: Vec<Value> = heights.iter().map(|height| json!([height])).collect();
-        let params_list: Vec<Value> = self
+        let hashes: Vec<BlockHash> = self
             .requests("getblockhash", &heights)?
-            .into_iter()
-            .map(|hash| json!([hash, /*verbose=*/ false]))
+            .iter()
+            .map(parse_hash)
+            .collect::<Result<_>>()?;
+        let params_list: Vec<Value> = hashes
+            .iter()
+            .map(|hash| json!([hash.to_string(), /*verbose=*/ false]))
             .collect();
         let mut result = vec![];
-        for h in self.requests("getblockheader", &params_list)? {
-            result.push(header_from_value(h)?);
+        for (h, expected) in self
+            .requests("getblockheader", &params_list)?
+            .into_iter()
+            .zip(hashes)
+        {
+            let header = header_from_value(h)?;
+            assert_eq!(header.block_hash(), expected);
+            result.push(header);
         }
         Ok(result)
     }
@@ -743,30 +1080,19 @@ impl Daemon {
             .collect())
     }
 
-    fn get_all_headers(&self, tip: &BlockHash) -> Result<Vec<BlockHeader>> {
+    fn get_all_headers(&self, tip: &BlockHash) -> Result<Vec<HeaderEntry>> {
         let info: Value = self.request("getblockheader", json!([tip.to_string()]))?;
         let tip_height = info
             .get("height")
             .expect("missing height")
             .as_u64()
             .expect("non-numeric height") as usize;
-        let all_heights: Vec<usize> = (0..=tip_height).collect();
-        let chunk_size = 100_000;
-        let mut result = vec![];
-        for heights in all_heights.chunks(chunk_size) {
-            trace!("downloading {} block headers", heights.len());
-            let mut headers = self.getblockheaders(heights)?;
-            assert!(headers.len() == heights.len());
-            result.append(&mut headers);
-        }
-
-        let mut blockhash = BlockHash::all_zeros();
-        for header in &result {
-            assert_eq!(header.prev_blockhash, blockhash);
-            blockhash = header.block_hash();
-        }
-        assert_eq!(blockhash, *tip);
-        Ok(result)
+        download_all_headers(
+            *tip,
+            tip_height,
+            |heights| self.getblockheaders(heights),
+            |hash| self.getblockheader(hash),
+        )
     }
 
     // Returns a list of BlockHeaders in ascending height (i.e. the tip is last).
@@ -774,7 +1100,7 @@ impl Daemon {
         &self,
         indexed_headers: &HeaderList,
         bestblockhash: &BlockHash,
-    ) -> Result<Vec<BlockHeader>> {
+    ) -> Result<Vec<HeaderEntry>> {
         // Iterate back over headers until known blockash is found:
         if indexed_headers.is_empty() {
             debug!("downloading all block headers up to {}", bestblockhash);
@@ -800,7 +1126,11 @@ impl Daemon {
         }
         trace!("downloaded {} block headers", new_headers.len());
         new_headers.reverse(); // so the tip is the last vector entry
-        Ok(new_headers)
+        let ordered = indexed_headers.order(new_headers);
+        if let Some(last) = ordered.last() {
+            assert_eq!(*last.hash(), *bestblockhash);
+        }
+        Ok(ordered)
     }
 
     pub fn get_relayfee(&self) -> Result<f64> {

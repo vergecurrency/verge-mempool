@@ -6,8 +6,8 @@ use crate::new_index::BlockEntry;
 
 use std::collections::HashMap;
 use std::fmt;
-use std::iter::FromIterator;
 use std::slice;
+use std::sync::Arc;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime as DateTime;
 
@@ -30,24 +30,35 @@ impl From<&HeaderEntry> for BlockId {
     }
 }
 
-#[derive(Eq, PartialEq, Clone)]
-pub struct HeaderEntry {
+#[derive(Eq, PartialEq)]
+struct HeaderEntryData {
     height: usize,
     hash: BlockHash,
     header: BlockHeader,
 }
 
+#[derive(Eq, PartialEq, Clone)]
+pub struct HeaderEntry(Arc<HeaderEntryData>);
+
 impl HeaderEntry {
+    pub fn new(height: usize, header: BlockHeader) -> Self {
+        Self(Arc::new(HeaderEntryData {
+            height,
+            hash: header.block_hash(),
+            header,
+        }))
+    }
+
     pub fn hash(&self) -> &BlockHash {
-        &self.hash
+        &self.0.hash
     }
 
     pub fn header(&self) -> &BlockHeader {
-        &self.header
+        &self.0.header
     }
 
     pub fn height(&self) -> usize {
-        self.height
+        self.0.height
     }
 }
 
@@ -79,64 +90,45 @@ impl HeaderList {
         }
     }
 
-    pub fn new(
-        mut headers_map: HashMap<BlockHash, BlockHeader>,
-        tip_hash: BlockHash,
-    ) -> HeaderList {
-        trace!(
-            "processing {} headers, tip at {:?}",
-            headers_map.len(),
-            tip_hash
-        );
-
+    pub fn new<F>(mut lookup: F, tip_hash: BlockHash) -> HeaderList
+    where
+        F: FnMut(&BlockHash) -> Option<BlockHeader>,
+    {
         let mut blockhash = tip_hash;
-        let mut headers_chain: Vec<BlockHeader> = vec![];
+        let mut headers_chain: Vec<HeaderEntry> = vec![];
         let null_hash = BlockHash::all_zeros();
 
         while blockhash != null_hash {
-            let header = headers_map.remove(&blockhash).unwrap_or_else(|| {
+            let header = lookup(&blockhash).unwrap_or_else(|| {
                 panic!(
-                    "missing expected blockhash in headers map: {:?}, pointed from: {:?}",
+                    "missing persisted header: {:?}, pointed from: {:?}",
                     blockhash,
-                    headers_chain.last().map(|h| h.block_hash())
+                    headers_chain.last().map(|h| h.hash())
                 )
             });
-            blockhash = header.prev_blockhash;
-            headers_chain.push(header);
+            let entry = HeaderEntry::new(0, header);
+            assert_eq!(*entry.hash(), blockhash);
+            blockhash = entry.header().prev_blockhash;
+            headers_chain.push(entry);
         }
         headers_chain.reverse();
 
-        trace!(
-            "{} chained headers ({} orphan blocks left)",
-            headers_chain.len(),
-            headers_map.len()
-        );
-
-        let mut headers = HeaderList::empty();
-        headers.apply(headers.order(headers_chain));
-        headers
+        let mut heights = HashMap::with_capacity(headers_chain.len());
+        for (height, entry) in headers_chain.iter_mut().enumerate() {
+            Arc::get_mut(&mut entry.0).unwrap().height = height;
+            heights.insert(*entry.hash(), height);
+        }
+        HeaderList {
+            headers: headers_chain,
+            heights,
+            tip: tip_hash,
+        }
     }
 
     pub fn order(&self, new_headers: Vec<BlockHeader>) -> Vec<HeaderEntry> {
-        // header[i] -> header[i-1] (i.e. header.last() is the tip)
-        struct HashedHeader {
-            blockhash: BlockHash,
-            header: BlockHeader,
-        }
-        let hashed_headers =
-            Vec::<HashedHeader>::from_iter(new_headers.into_iter().map(|header| HashedHeader {
-                blockhash: header.block_hash(),
-                header,
-            }));
-        for i in 1..hashed_headers.len() {
-            assert_eq!(
-                hashed_headers[i].header.prev_blockhash,
-                hashed_headers[i - 1].blockhash
-            );
-        }
-        let prev_blockhash = match hashed_headers.first() {
-            Some(h) => h.header.prev_blockhash,
-            None => return vec![], // hashed_headers is empty
+        let prev_blockhash = match new_headers.first() {
+            Some(h) => h.prev_blockhash,
+            None => return vec![],
         };
         let null_hash = BlockHash::all_zeros();
         let new_height: usize = if prev_blockhash == null_hash {
@@ -147,12 +139,15 @@ impl HeaderList {
                 .height()
                 + 1
         };
-        (new_height..)
-            .zip(hashed_headers)
-            .map(|(height, hashed_header)| HeaderEntry {
-                height,
-                hash: hashed_header.blockhash,
-                header: hashed_header.header,
+        let mut previous = prev_blockhash;
+        new_headers
+            .into_iter()
+            .enumerate()
+            .map(|(offset, header)| {
+                assert_eq!(header.prev_blockhash, previous);
+                let entry = HeaderEntry::new(new_height + offset, header);
+                previous = *entry.hash();
+                entry
             })
             .collect()
     }
@@ -190,6 +185,11 @@ impl HeaderList {
             new_height
         );
         let mut removed = self.headers.split_off(new_height); // keep [0..new_height) entries
+        for entry in &removed {
+            self.heights.remove(entry.hash());
+        }
+        self.headers.reserve(new_headers.len());
+        self.heights.reserve(new_headers.len());
 
         // If we reorged, we should return the last blockhash before adding the new chain's blockheaders.
         let reorged_tip = if !removed.is_empty() {
@@ -273,12 +273,12 @@ impl HeaderList {
         // Use the timestamp as the mtp of the genesis block.
         // Matches bitcoind's behaviour: bitcoin-cli getblock `bitcoin-cli getblockhash 0` | jq '.time == .mediantime'
         if height == 0 {
-            self.headers.first().unwrap().header.time
+            self.headers.first().unwrap().header().time
         } else if height > self.len() - 1 {
             0
         } else {
             let mut timestamps = (height.saturating_sub(MTP_SPAN - 1)..=height)
-                .map(|p_height| self.headers.get(p_height).unwrap().header.time)
+                .map(|p_height| self.headers.get(p_height).unwrap().header().time)
                 .collect::<Vec<_>>();
             timestamps.sort_unstable();
             timestamps[timestamps.len() / 2]
@@ -371,6 +371,31 @@ mod rollback_tests {
             &replacement.block_hash()
         );
         assert!(list.rollback_to(&replacement.block_hash()).is_empty());
+    }
+
+    #[test]
+    fn clones_share_headers_and_reload_only_walks_the_indexed_chain() {
+        let genesis = child(BlockHash::all_zeros(), 10);
+        let next = child(genesis.block_hash(), 11);
+        let tip = next.block_hash();
+        let mut stored = HashMap::from([(genesis.block_hash(), genesis), (tip, next)]);
+        let mut reads = 0;
+        let list = HeaderList::new(
+            |hash| {
+                reads += 1;
+                stored.remove(hash)
+            },
+            tip,
+        );
+        assert_eq!(reads, 2);
+        let entry = list.header_by_height(1).unwrap();
+        let cloned = entry.clone();
+        assert!(std::ptr::eq(entry.header(), cloned.header()));
+        assert_eq!(
+            std::mem::size_of::<HeaderEntry>(),
+            std::mem::size_of::<usize>()
+        );
+        assert_eq!(*list.tip(), tip);
     }
 }
 

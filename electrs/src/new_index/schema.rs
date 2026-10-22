@@ -49,32 +49,27 @@ pub struct Store {
     txstore_db: DB,
     history_db: DB,
     cache_db: DB,
-    added_blockhashes: RwLock<HashSet<BlockHash>>,
-    indexed_blockhashes: RwLock<HashSet<BlockHash>>,
     indexed_headers: RwLock<HeaderList>,
 }
 
 impl Store {
     pub fn open(path: &Path, config: &Config) -> Self {
         let txstore_db = DB::open(&path.join("txstore"), config);
-        let added_blockhashes = load_blockhashes(&txstore_db, &BlockRow::done_filter());
-        debug!("{} blocks were added", added_blockhashes.len());
 
         let history_db = DB::open(&path.join("history"), config);
-        let indexed_blockhashes = load_blockhashes(&history_db, &BlockRow::done_filter());
-        debug!("{} blocks were indexed", indexed_blockhashes.len());
 
         let cache_db = DB::open(&path.join("cache"), config);
 
         let headers = if let Some(tip_hash) = txstore_db.get(b"t") {
             let tip_hash = deserialize(&tip_hash).expect("invalid chain tip in `t`");
-            let headers_map = load_blockheaders(&txstore_db);
-            debug!(
-                "{} headers were loaded, tip at {:?}",
-                headers_map.len(),
-                tip_hash
-            );
-            HeaderList::new(headers_map, tip_hash)
+            HeaderList::new(
+                |hash| {
+                    txstore_db
+                        .get(&BlockRow::header_key(full_hash(&hash[..])))
+                        .map(|raw| deserialize(&raw).expect("failed to parse BlockHeader"))
+                },
+                tip_hash,
+            )
         } else {
             HeaderList::empty()
         };
@@ -83,8 +78,6 @@ impl Store {
             txstore_db,
             history_db,
             cache_db,
-            added_blockhashes: RwLock::new(added_blockhashes),
-            indexed_blockhashes: RwLock::new(indexed_blockhashes),
             indexed_headers: RwLock::new(headers),
         }
     }
@@ -249,19 +242,27 @@ impl Indexer {
     }
 
     fn headers_to_add(&self, new_headers: &[HeaderEntry]) -> Vec<HeaderEntry> {
-        let added_blockhashes = self.store.added_blockhashes.read().unwrap();
         new_headers
             .iter()
-            .filter(|e| !added_blockhashes.contains(e.hash()))
+            .filter(|e| {
+                !self
+                    .store
+                    .txstore_db
+                    .contains(&BlockRow::done_key(full_hash(&e.hash()[..])))
+            })
             .cloned()
             .collect()
     }
 
     fn headers_to_index(&self, new_headers: &[HeaderEntry]) -> Vec<HeaderEntry> {
-        let indexed_blockhashes = self.store.indexed_blockhashes.read().unwrap();
         new_headers
             .iter()
-            .filter(|e| !indexed_blockhashes.contains(e.hash()))
+            .filter(|e| {
+                !self
+                    .store
+                    .history_db
+                    .contains(&BlockRow::done_key(full_hash(&e.hash()[..])))
+            })
             .cloned()
             .collect()
     }
@@ -278,8 +279,7 @@ impl Indexer {
 
     fn get_new_headers(&self, daemon: &Daemon, tip: &BlockHash) -> Result<Vec<HeaderEntry>> {
         let headers = self.store.indexed_headers.read().unwrap();
-        let new_headers = daemon.get_new_headers(&headers, tip)?;
-        let result = headers.order(new_headers);
+        let result = daemon.get_new_headers(&headers, tip)?;
 
         if let Some(tip) = result.last() {
             info!("{:?} ({} left to index)", tip, result.len());
@@ -425,20 +425,10 @@ impl Indexer {
         }
 
         if let Operation::AddBlocks = op {
-            self.store
-                .added_blockhashes
-                .write()
-                .unwrap()
-                .extend(blocks.iter().map(|b| {
-                    if b.entry.height() % 10_000 == 0 {
-                        info!("Tx indexing is up to height={}", b.entry.height());
-                    }
-                    b.entry.hash()
-                }));
-        } else {
-            let mut added_blockhashes = self.store.added_blockhashes.write().unwrap();
             for b in blocks {
-                added_blockhashes.remove(b.entry.hash());
+                if b.entry.height() % 10_000 == 0 {
+                    info!("Tx indexing is up to height={}", b.entry.height());
+                }
             }
         }
     }
@@ -456,14 +446,16 @@ impl Indexer {
         let rows = {
             let _timer = self.start_timer("index_process");
             if let Operation::AddBlocks = op {
-                let added_blockhashes = self.store.added_blockhashes.read().unwrap();
                 for b in blocks {
                     if b.entry.height() % 10_000 == 0 {
                         info!("History indexing is up to height={}", b.entry.height());
                     }
                     let blockhash = b.entry.hash();
-                    // TODO: replace by lookup into txstore_db?
-                    if !added_blockhashes.contains(blockhash) {
+                    if !self
+                        .store
+                        .txstore_db
+                        .contains(&BlockRow::done_key(full_hash(&blockhash[..])))
+                    {
                         panic!("cannot index block {} (missing from store)", blockhash);
                     }
                 }
@@ -1368,24 +1360,6 @@ impl ChainQuery {
     }
 }
 
-fn load_blockhashes(db: &DB, prefix: &[u8]) -> HashSet<BlockHash> {
-    db.iter_scan(prefix)
-        .map(BlockRow::from_row)
-        .map(|r| deserialize(&r.key.hash).expect("failed to parse BlockHash"))
-        .collect()
-}
-
-fn load_blockheaders(db: &DB) -> HashMap<BlockHash, BlockHeader> {
-    db.iter_scan(&BlockRow::header_filter())
-        .map(BlockRow::from_row)
-        .map(|r| {
-            let key: BlockHash = deserialize(&r.key.hash).expect("failed to parse BlockHash");
-            let value: BlockHeader = deserialize(&r.value).expect("failed to parse BlockHeader");
-            (key, value)
-        })
-        .collect()
-}
-
 fn add_blocks(block_entries: &[BlockEntry], iconfig: &IndexerConfig) -> Vec<DBRow> {
     // persist individual transactions:
     //      T{txid} → {rawtx}
@@ -1831,8 +1805,8 @@ impl BlockRow {
         }
     }
 
-    fn header_filter() -> Bytes {
-        b"B".to_vec()
+    fn header_key(hash: FullHash) -> Bytes {
+        [b"B", &hash[..]].concat()
     }
 
     fn txids_key(hash: FullHash) -> Bytes {
@@ -1843,8 +1817,8 @@ impl BlockRow {
         [b"M", &hash[..]].concat()
     }
 
-    fn done_filter() -> Bytes {
-        b"D".to_vec()
+    fn done_key(hash: FullHash) -> Bytes {
+        [b"D", &hash[..]].concat()
     }
 
     fn into_row(self) -> DBRow {
@@ -1853,12 +1827,27 @@ impl BlockRow {
             value: self.value,
         }
     }
+}
 
-    fn from_row(row: DBRow) -> Self {
-        BlockRow {
-            key: bincode_util::deserialize_little(&row.key).unwrap(),
-            value: row.value,
+#[cfg(test)]
+mod import_marker_tests {
+    use super::*;
+
+    #[test]
+    fn completion_lookup_keeps_the_existing_serialized_key_format() {
+        let hash = [17_u8; 32];
+        let row = BlockRow::new_done(hash).into_row();
+        assert_eq!(row.key, BlockRow::done_key(hash));
+        assert!(row.value.is_empty());
+        let directory = tempfile::tempdir().unwrap();
+        {
+            let db = DB::open_test(directory.path());
+            db.write(vec![row], DBFlush::Enable);
         }
+        let db = DB::open_test(directory.path());
+        assert!(db.contains(&BlockRow::done_key(hash)));
+        assert!(!db.contains(&BlockRow::done_key([18_u8; 32])));
+        assert!(!db.contains(b"t"));
     }
 }
 

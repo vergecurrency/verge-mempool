@@ -1,0 +1,26 @@
+{
+  "copyright": "Copyright (c) 2026 Verge",
+  "source": "Public mainnet headers captured read-only from blk00061.dat; heights verified against Core log and RPC",
+  "blocks": [
+    {
+      "height": 9550375,
+      "hash": "0bd6425805beea81649ac0cd8485b45ed5d78935793c3f546c054917dd04735f",
+      "header": "04180000a790efe3dc21dd490d894e6c85d69580054c32a9388d0d22a462c427000000004cbe9b29c174bbd296313c30b6bbfc60a69585fa2a111cfb9e83eac74aa8670fb100da6a08ba001e0008c354"
+    },
+    {
+      "height": 9550376,
+      "hash": "000000001c2cc6e15d5b05ab37d0d18188f7fd2e34ceb655efa77de945b499e8",
+      "header": "040800005f7304dd1749056c543f3c793589d7d55eb48584cdc09a6481eabe055842d60bb29db9ec0143f1167005da7f72e97b024fca986117041a75e3f6e5cbf465b42ec500da6a4dec281c51d245b7"
+    },
+    {
+      "height": 9550376,
+      "hash": "f257adf8320fc00f0e92fa5406d817145e07fc1b921dc187ff3b0bed3fd535d7",
+      "header": "041800005f7304dd1749056c543f3c793589d7d55eb48584cdc09a6481eabe055842d60bff8608ff677fe2e2d5e3908a66c6dc84019365222cb6054bb2647a7441f112130501da6a0bc0001e000df62c"
+    },
+    {
+      "height": 9550377,
+      "hash": "54c6677f2f5c44ce50a90ed6362441d2bf1ef1dd18f998d909c8d78061947e71",
+      "header": "04100000d735d53fed0b3bff87c11d921bfc075e1417d80654fa920e0fc00f32f8ad57f2f5a6025946bdc1bd74c88d97961dc384ee790e3b4374e2cd6e2859f3f223479e2401da6afae7031e99abf7a9"
+    }
+  ]
+}
