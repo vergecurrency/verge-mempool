@@ -86,7 +86,12 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
 
     try {
       const balance = await this.$getScriptHashBalance(addressInfo.scriptPubKey);
-      const history = await this.$getScriptHashHistory(addressInfo.scriptPubKey);
+      let history;
+      try { history = await this.$getScriptHashHistory(addressInfo.scriptPubKey); }
+      catch (error) {
+        if (this.isVergeHistoryLimit(error)) { return await this.$getVergeRestSummary('address', addressInfo.address) as IEsploraApi.Address; }
+        throw error;
+      }
 
       const unconfirmed = history.filter((h) => h.height <= 0).length;
 
@@ -124,7 +129,12 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
       loadingIndicators.setProgress('address-' + address, 0);
 
       const transactions: IEsploraApi.Transaction[] = [];
-      const history = await this.$getScriptHashHistory(addressInfo.scriptPubKey);
+      let history;
+      try { history = await this.$getScriptHashHistory(addressInfo.scriptPubKey); }
+      catch (error) {
+        if (this.isVergeHistoryLimit(error)) { return this.$getVergeRestTransactions('address', addressInfo.address, lastSeenTxId); }
+        throw error;
+      }
       history.sort(compareElectrumHistory);
       const startingIndex = electrumCursorStart(history, lastSeenTxId);
       const endIndex = Math.min(startingIndex + 10, history.length);
@@ -149,7 +159,12 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
       const balance: IElectrumApi.ScriptHashBalance = await this.$verifiedElectrumRequest(() => this.electrumClient.blockchainScripthash_getBalance(scripthash));
       safeAtomicNumber(balance.confirmed);
       safeAtomicNumber(balance.unconfirmed);
-      const history = await this.$getElectrumHistory(scripthash);
+      let history;
+      try { history = await this.$getElectrumHistory(scripthash); }
+      catch (error) {
+        if (this.isVergeHistoryLimit(error)) { return await this.$getVergeRestSummary('scripthash', scripthash) as IEsploraApi.ScriptHash; }
+        throw error;
+      }
 
       const unconfirmed = history ? history.filter((h) => h.height <= 0).length : 0;
 
@@ -192,7 +207,12 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
       loadingIndicators.setProgress('address-' + scripthash, 0);
 
       const transactions: IEsploraApi.Transaction[] = [];
-      const history = await this.$getElectrumHistory(scripthash);
+      let history;
+      try { history = await this.$getElectrumHistory(scripthash); }
+      catch (error) {
+        if (this.isVergeHistoryLimit(error)) { return this.$getVergeRestTransactions('scripthash', scripthash, lastSeenTxId); }
+        throw error;
+      }
       if (!history) {
         throw new Error('failed to get scripthash history');
       }
@@ -376,6 +396,66 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
 
   private encodeScriptHash(scriptPubKey: string): string {
     return scriptHashForElectrum(scriptPubKey);
+  }
+
+  private isVergeHistoryLimit(error: unknown): boolean {
+    return isVerge && /Too many history transactions \(>\d+\)/.test(String((error as Error)?.message || error));
+  }
+
+  /** @asyncUnsafe */
+  private async $getVergeRest<T>(path: string): Promise<T> {
+    this.assertChainVerified();
+    await this.$assertVergeElectrumTip();
+    const base = new URL(config.ESPLORA.REST_API_URL);
+    if (base.protocol !== 'http:' || base.hostname !== '127.0.0.1' || !base.port || base.username || base.password) {
+      throw new Error('Verge indexed REST API must use a local loopback HTTP listener');
+    }
+    const url = new URL(path, base);
+    const response = await axios.get<T>(url.href, { timeout: 15000, proxy: false, maxRedirects: 0 });
+    return response.data;
+  }
+
+  private vergeRestScript(kind: 'address' | 'scripthash', value: string): string {
+    if (kind === 'address') { return encodeURIComponent(value); }
+    if (!/^[a-f\d]{64}$/i.test(value)) { throw new Error('Invalid Verge script hash'); }
+    return value.match(/../g)!.reverse().join('');
+  }
+
+  /** @asyncUnsafe */
+  private async $getVergeRestSummary(kind: 'address' | 'scripthash', value: string): Promise<IEsploraApi.Address | IEsploraApi.ScriptHash> {
+    const script = this.vergeRestScript(kind, value);
+    const summary = await this.$getVergeRest<any>(`/${kind}/${script}`);
+    if (!summary || summary[kind] !== script || !summary.chain_stats || !summary.mempool_stats) {
+      throw new Error('Invalid Verge indexed address summary');
+    }
+    for (const stats of [summary.chain_stats, summary.mempool_stats]) {
+      for (const key of ['funded_txo_sum', 'spent_txo_sum']) { stats[key] = safeAtomicNumber(stats[key]); }
+      for (const key of ['funded_txo_count', 'spent_txo_count', 'tx_count']) {
+        if (!Number.isSafeInteger(stats[key]) || stats[key] < 0) { throw new Error('Invalid Verge indexed address count'); }
+      }
+    }
+    return { ...summary, [kind]: value, electrum: true };
+  }
+
+  /** @asyncUnsafe */
+  private async $getVergeRestTransactions(kind: 'address' | 'scripthash', value: string, lastSeenTxId?: string): Promise<IEsploraApi.Transaction[]> {
+    const script = this.vergeRestScript(kind, value);
+    if (lastSeenTxId && !/^[a-f\d]{64}$/i.test(lastSeenTxId)) { throw new Error('Invalid Verge history cursor'); }
+    const query = lastSeenTxId ? `&after_txid=${lastSeenTxId}` : '';
+    const page = await this.$getVergeRest<any>(`/${kind}/${script}/txs?max_txs=10${query}`);
+    if (!Array.isArray(page) || page.length > 10) { throw new Error('Invalid Verge indexed history page'); }
+    const transactions: IEsploraApi.Transaction[] = [];
+    const seen = new Set<string>();
+    for (const entry of page) {
+      if (!/^[a-f\d]{64}$/i.test(entry?.txid) || seen.has(entry.txid)) { throw new Error('Invalid Verge indexed history transaction'); }
+      seen.add(entry.txid);
+      if (typeof entry.status?.confirmed !== 'boolean') { throw new Error('Invalid Verge indexed history status'); }
+      const height = entry.status?.confirmed === true ? entry.status.block_height : 0;
+      if (!Number.isSafeInteger(height) || height < 0) { throw new Error('Invalid Verge indexed history height'); }
+      this.rememberHistoryHeight({ tx_hash: entry.txid, height });
+      transactions.push(await this.$getRawTransaction(entry.txid, false, true));
+    }
+    return transactions;
   }
 
   private assertChainVerified(): void {

@@ -69,6 +69,10 @@ same chain and Rust Electrum service. Keep `ESPLORA.REST_API_URL` pointed at the
 local Rust REST listener even with `MEMPOOL.BACKEND=electrum`: direct historical
 transaction pages use its block location, then ask Core for the transaction
 with that canonical block hash. This supports an unpruned Core with `txindex=0`.
+If an Electrum history response exceeds its configured limit, Verge backend
+address/script summaries and ten-transaction pages use the local Rust REST
+index. The backend still verifies each returned transaction through Core and
+rejects summary amounts outside its exact numeric API range.
 All application/indexer listeners stay on loopback. SQL, Lightning, pricing,
 Bitcoin mining statistics, native GBT
 selection and unqualified transaction tools remain disabled. The backend's

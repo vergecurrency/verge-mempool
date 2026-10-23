@@ -197,6 +197,51 @@ test('Electrum confirmed address history uses the Core block-hash hint without a
   assert.equal(await api.$getTransactionHex(transaction.txid), transaction.hex);
 });
 
+test('Verge script summary falls back to bounded indexed REST after the Electrum history limit', async () => {
+  const electrumHash = 'ab' + '01'.repeat(31);
+  const restHash = electrumHash.match(/../g)!.reverse().join('');
+  const { api } = await electrumAdapter({ getBlockHash: async () => fixtures.blocks[1].block.hash }, {
+    history: async () => { throw new Error('Too many history transactions (>500). Contact support to raise limits.'); },
+    restStatus: async (url: string, options: any) => {
+      assert.equal(url, `http://127.0.0.1:3001/scripthash/${restHash}`);
+      assert.deepEqual(options, { timeout: 15000, proxy: false, maxRedirects: 0 });
+      return { data: {
+        scripthash: restHash,
+        chain_stats: { funded_txo_count: 400, funded_txo_sum: 1000, spent_txo_count: 300, spent_txo_sum: 900, tx_count: 68564 },
+        mempool_stats: { funded_txo_count: 0, funded_txo_sum: 0, spent_txo_count: 0, spent_txo_sum: 0, tx_count: 0 },
+      } };
+    },
+  });
+  const summary = await api.$getScriptHash(electrumHash);
+  assert.equal(summary.scripthash, electrumHash);
+  assert.equal(summary.chain_stats.tx_count, 68564);
+  assert.equal(summary.chain_stats.funded_txo_sum - summary.chain_stats.spent_txo_sum, 100);
+});
+
+test('Verge large-history page uses a bounded REST cursor and canonical Core transaction', async () => {
+  const fixture = fixtures.blocks[1];
+  const transaction = { ...fixture.block.tx[0], confirmations: 1, blockhash: fixture.block.hash, blocktime: fixture.block.time };
+  const electrumHash = 'ab' + '01'.repeat(31);
+  const restHash = electrumHash.match(/../g)!.reverse().join('');
+  const cursor = 'c'.repeat(64);
+  const calls: unknown[][] = [];
+  const { api } = await electrumAdapter({
+    getBlockHash: async () => fixture.block.hash,
+    getBlockHeader: async () => fixture.block,
+    getRawTransaction: async (...params: unknown[]) => { calls.push(params); return transaction; },
+  }, {
+    history: async () => { throw new Error('Too many history transactions (>500). Contact support to raise limits.'); },
+    restStatus: async (url: string) => {
+      assert.equal(url, `http://127.0.0.1:3001/scripthash/${restHash}/txs?max_txs=10&after_txid=${cursor}`);
+      return { data: [{ txid: transaction.txid, status: { confirmed: true, block_height: 1, block_hash: fixture.block.hash } }] };
+    },
+  });
+  const page = await api.$getScriptHashTransactions(electrumHash, cursor);
+  assert.equal(page.length, 1);
+  assert.equal(page[0].txid, transaction.txid);
+  assert.deepEqual(calls[0], [transaction.txid, true, fixture.block.hash]);
+});
+
 test('Electrum direct historical transaction lookup uses the local index and a canonical Core block hint', async () => {
   const fixture = fixtures.blocks[1];
   const transaction = { ...fixture.block.tx[0], confirmations: 1, blockhash: fixture.block.hash, blocktime: fixture.block.time };
