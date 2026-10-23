@@ -47,7 +47,11 @@ async function electrumAdapter(core: any, options: any = {}) {
     close() { this.closed = true; this.callbacks.onClose(this); }
   }
   const apiClass = importWithDependencies(resolve(__dirname, '../../api/bitcoin/electrum-api.ts'), {
-    '../../config': { ELECTRUM: { HOST: 'electrum.verge.test', PORT: 50002, TLS_ENABLED: options.tls ?? false, TLS_CERTIFICATE_FINGERPRINT: options.pin ?? '', MAX_BEHIND_TIP: options.maximumLag ?? 0 } },
+    '../../config': {
+      ELECTRUM: { HOST: 'electrum.verge.test', PORT: 50002, TLS_ENABLED: options.tls ?? false, TLS_CERTIFICATE_FINGERPRINT: options.pin ?? '', MAX_BEHIND_TIP: options.maximumLag ?? 0 },
+      ESPLORA: { REST_API_URL: options.restUrl ?? 'http://127.0.0.1:3001' },
+    },
+    'axios': { get: options.restStatus ?? (async () => { throw new Error('Unexpected indexed REST lookup'); }) },
     '@mempool/electrum-client': ElectrumDouble,
     './bitcoin-api': base.constructor,
     '../../logger': { info: () => {}, err: () => {}, debug: () => {} },
@@ -191,6 +195,71 @@ test('Electrum confirmed address history uses the Core block-hash hint without a
   assert.equal(transactions[0].status.block_height, 1);
   assert.deepEqual(calls[0], [transaction.txid, true, fixture.block.hash]);
   assert.equal(await api.$getTransactionHex(transaction.txid), transaction.hex);
+});
+
+test('Electrum direct historical transaction lookup uses the local index and a canonical Core block hint', async () => {
+  const fixture = fixtures.blocks[1];
+  const transaction = { ...fixture.block.tx[0], confirmations: 1, blockhash: fixture.block.hash, blocktime: fixture.block.time };
+  const calls: unknown[][] = [];
+  let statusQueries = 0;
+  const { api } = await electrumAdapter({
+    getBlockHash: async () => fixture.block.hash,
+    getBlockHeader: async () => fixture.block,
+    getRawTransaction: async (...params: unknown[]) => {
+      calls.push(params);
+      if (!params[2]) { throw Object.assign(new Error('Use -txindex'), { code: -5 }); }
+      return transaction;
+    },
+  }, { restStatus: async (url: string, options: { timeout: number; proxy: boolean; maxRedirects: number }) => {
+    statusQueries++;
+    assert.equal(url, `http://127.0.0.1:3001/tx/${transaction.txid}/status`);
+    assert.equal(options.timeout, 5000);
+    assert.equal(options.proxy, false);
+    assert.equal(options.maxRedirects, 0);
+    return { data: { confirmed: true, block_height: 1, block_hash: fixture.block.hash } };
+  } });
+  const result = await api.$getRawTransaction(transaction.txid);
+  assert.equal(result.txid, transaction.txid);
+  assert.equal(result.status.block_height, 1);
+  assert.equal(statusQueries, 1);
+  assert.deepEqual(calls, [[transaction.txid, true], [transaction.txid, true, fixture.block.hash]]);
+});
+
+test('Electrum direct lookup refuses a stale index block and never uses its Core hint', async () => {
+  const transaction = fixtures.blocks[1].block.tx[0];
+  const calls: unknown[][] = [];
+  const { api } = await electrumAdapter({
+    getBlockHash: async () => fixtures.blocks[1].block.hash,
+    getRawTransaction: async (...params: unknown[]) => {
+      calls.push(params);
+      throw Object.assign(new Error('Use -txindex'), { code: -5 });
+    },
+  }, { restStatus: async () => ({ data: { confirmed: true, block_height: 1, block_hash: 'f'.repeat(64) } }) });
+  await assert.rejects(api.$getRawTransaction(transaction.txid), /diverges from Core/);
+  assert.deepEqual(calls, [[transaction.txid, true]]);
+});
+
+test('Electrum direct lookup reports an unknown indexed transaction as absent', async () => {
+  const txid = 'f'.repeat(64);
+  const { api } = await electrumAdapter({
+    getRawTransaction: async () => { throw Object.assign(new Error('Use -txindex'), { code: -5 }); },
+  }, { restStatus: async () => { throw Object.assign(new Error('Not Found'), { response: { status: 404 } }); } });
+  await assert.rejects(api.$getRawTransaction(txid), /No such mempool or blockchain transaction/);
+});
+
+test('Electrum direct lookup preserves Core transport errors and requires a loopback index', async () => {
+  const transaction = fixtures.blocks[1].block.tx[0];
+  let statusQueries = 0;
+  const { api } = await electrumAdapter({
+    getRawTransaction: async () => { throw Object.assign(new Error('Core timeout'), { code: 'ETIMEDOUT' }); },
+  }, { restStatus: async () => { statusQueries++; return { data: {} }; } });
+  await assert.rejects(api.$getRawTransaction(transaction.txid), /Core timeout/);
+  assert.equal(statusQueries, 0);
+  const unsafe = await electrumAdapter({
+    getRawTransaction: async () => { throw Object.assign(new Error('Use -txindex'), { code: -5 }); },
+  }, { restUrl: 'https://remote.example:3001', restStatus: async () => { statusQueries++; return { data: {} }; } });
+  await assert.rejects(unsafe.api.$getRawTransaction(transaction.txid), /local loopback/);
+  assert.equal(statusQueries, 0);
 });
 
 test('Electrum prevout fallback verifies raw IDs and uses Core decoding without inventing confirmation or fees', async () => {

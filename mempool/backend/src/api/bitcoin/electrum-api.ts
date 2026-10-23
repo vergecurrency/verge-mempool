@@ -14,6 +14,7 @@ import { assertElectrumTlsPeer } from '../verge/electrum-tls';
 import { IBitcoinApi } from './bitcoin-api.interface';
 import { decodeVergeTransaction, decodeVergeHeader } from '../verge/codec';
 import { verifyElectrumMerkle } from '../verge/electrum-probe';
+import axios from 'axios';
 
 class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
   private electrumClient: any;
@@ -303,13 +304,51 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
   }
 
   /** @asyncUnsafe */
-  protected async $getCoreTransaction(txid: string): Promise<IBitcoinApi.Transaction> {
+  protected async $getCoreTransaction(txid: string, forPrevout = false): Promise<IBitcoinApi.Transaction> {
     const height = isVerge ? this.knownTransactionHeights.get(txid) : undefined;
-    if (height === undefined || height <= 0) { return super.$getCoreTransaction(txid); }
+    if (height === undefined || height <= 0) {
+      try { return await super.$getCoreTransaction(txid); }
+      catch (error) {
+        if (!isVerge || forPrevout || (error as { code?: number }).code !== -5) { throw error; }
+        return this.$getVergeIndexedTransaction(txid);
+      }
+    }
     this.assertChainVerified();
     const blockhash = await this.bitcoindClient.getBlockHash(height);
     const transaction = await this.bitcoindClient.getRawTransaction(txid, true, blockhash);
     if (transaction.in_active_chain === false) { throw new Error('Verge address history reorganized; refresh the history'); }
+    return transaction;
+  }
+
+  /** Resolve a direct historical tx lookup without requiring Core txindex. @asyncUnsafe */
+  private async $getVergeIndexedTransaction(txid: string): Promise<IBitcoinApi.Transaction> {
+    this.assertChainVerified();
+    if (!/^[a-f\d]{64}$/i.test(txid)) { throw new Error('Invalid Verge transaction ID'); }
+    const rest = new URL(config.ESPLORA.REST_API_URL);
+    if (rest.protocol !== 'http:' || rest.hostname !== '127.0.0.1' || !rest.port || rest.username || rest.password) {
+      throw new Error('Verge indexed REST API must use a local loopback HTTP listener');
+    }
+    const statusUrl = new URL(`/tx/${txid}/status`, rest);
+    let status;
+    try {
+      ({ data: status } = await axios.get(statusUrl.href, { timeout: 5000, proxy: false, maxRedirects: 0 }));
+    } catch (error) {
+      if ((error as { response?: { status?: number } }).response?.status === 404) {
+        throw new Error('No such mempool or blockchain transaction');
+      }
+      throw error;
+    }
+    if (status?.confirmed !== true || !Number.isSafeInteger(status.block_height) || status.block_height < 1 ||
+        typeof status.block_hash !== 'string' || !/^[a-f\d]{64}$/i.test(status.block_hash)) {
+      throw new Error('Verge indexed transaction has no valid canonical block location');
+    }
+    const blockhash = await this.bitcoindClient.getBlockHash(status.block_height);
+    if (blockhash !== status.block_hash) { throw new Error('Verge indexed transaction block diverges from Core'); }
+    const transaction = await this.bitcoindClient.getRawTransaction(txid, true, blockhash);
+    if (transaction.txid !== txid || transaction.in_active_chain === false ||
+        await this.bitcoindClient.getBlockHash(status.block_height) !== blockhash) {
+      throw new Error('Verge indexed transaction block changed; refresh the transaction');
+    }
     return transaction;
   }
 

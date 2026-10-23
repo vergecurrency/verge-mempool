@@ -65,8 +65,12 @@ required read access to the existing RPC cookie. Adapt paths to the actual
 node; no Core configuration or wallet changes are performed by these files.
 
 Copy the backend example to `/etc/verge-explorer/backend.json` and select the
-same chain and Rust Electrum service. All application/indexer listeners stay
-on loopback. SQL, Lightning, pricing, Bitcoin mining statistics, native GBT
+same chain and Rust Electrum service. Keep `ESPLORA.REST_API_URL` pointed at the
+local Rust REST listener even with `MEMPOOL.BACKEND=electrum`: direct historical
+transaction pages use its block location, then ask Core for the transaction
+with that canonical block hash. This supports an unpruned Core with `txindex=0`.
+All application/indexer listeners stay on loopback. SQL, Lightning, pricing,
+Bitcoin mining statistics, native GBT
 selection and unqualified transaction tools remain disabled. The backend's
 `HTTP_HOST` is explicit; upstream's default listener behavior is preserved for
 other configurations.

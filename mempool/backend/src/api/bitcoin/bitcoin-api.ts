@@ -404,7 +404,7 @@ class BitcoinApi implements AbstractBitcoinApi {
   }
 
   /** Override the retrieval mechanism without duplicating amount/confirmation conversion. */
-  protected $getCoreTransaction(txid: string): Promise<IBitcoinApi.Transaction> {
+  protected $getCoreTransaction(txid: string, _forPrevout = false): Promise<IBitcoinApi.Transaction> {
     return this.bitcoindClient.getRawTransaction(txid, true);
   }
 
@@ -444,7 +444,7 @@ class BitcoinApi implements AbstractBitcoinApi {
       this.vergePrevoutCache.set(txid, cached);
       return { vout: cached.vout.map(output => ({ ...output })) };
     }
-    const transaction = await this.$getCoreTransaction(txid);
+    const transaction = await this.$getCoreTransaction(txid, true);
     if (transaction.txid !== txid) { throw new Error('Verge previous transaction ID mismatch'); }
     const vout = this.$convertTransactionOutputs(transaction, this.$decodeVergeRpcTransaction(transaction));
     const bytes = Buffer.byteLength(JSON.stringify(vout));

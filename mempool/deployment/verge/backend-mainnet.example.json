@@ -7,6 +7,7 @@
   },
   "CORE_RPC": { "HOST": "127.0.0.1", "PORT": 20102, "COOKIE": true, "COOKIE_PATH": "/var/lib/verge/.cookie" },
   "ELECTRUM": { "HOST": "127.0.0.1", "PORT": 60001, "TLS_ENABLED": false, "MAX_BEHIND_TIP": 2 },
+  "ESPLORA": { "REST_API_URL": "http://127.0.0.1:3001" },
   "DATABASE": { "ENABLED": false, "DATABASE": "verge_mainnet" },
   "FIAT_PRICE": { "ENABLED": false },
   "LIGHTNING": { "ENABLED": false },
