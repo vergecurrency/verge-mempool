@@ -5,7 +5,16 @@
     const notice = document.createElement('div');
     notice.id = 'verge-preview-notice';
     notice.setAttribute('role', 'status');
-    notice.textContent = 'Preview: address queries and performance are still being qualified. Verify critical balances independently.';
+    const message = document.createElement('span');
+    message.textContent = 'Preview: address queries and performance are still being qualified. Verify critical balances independently.';
+    notice.appendChild(message);
+    const apiLink = document.createElement('a');
+    apiLink.href = '/api-docs.html';
+    apiLink.textContent = 'API reference';
+    Object.assign(apiLink.style, {
+      color: '#fff', marginLeft: '14px', textDecoration: 'underline',
+    });
+    notice.appendChild(apiLink);
     Object.assign(notice.style, {
       position: 'sticky', top: '0', zIndex: '10000',
       padding: '10px 16px', textAlign: 'center',
