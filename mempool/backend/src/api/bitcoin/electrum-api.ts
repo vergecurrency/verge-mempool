@@ -338,12 +338,20 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
       }
       throw error;
     }
-    if (status?.confirmed !== true || !Number.isSafeInteger(status.block_height) || status.block_height < 1 ||
+    if (status?.confirmed === false) { throw new Error('No such mempool or blockchain transaction'); }
+    if (status?.confirmed !== true || !Number.isSafeInteger(status.block_height) || status.block_height < 0 ||
         typeof status.block_hash !== 'string' || !/^[a-f\d]{64}$/i.test(status.block_hash)) {
       throw new Error('Verge indexed transaction has no valid canonical block location');
     }
     const blockhash = await this.bitcoindClient.getBlockHash(status.block_height);
     if (blockhash !== status.block_hash) { throw new Error('Verge indexed transaction block diverges from Core'); }
+    if (status.block_height === 0) {
+      const genesis = await this.bitcoindClient.getBlock(blockhash, 2);
+      if (genesis.hash !== blockhash || genesis.tx[0]?.txid !== txid) {
+        throw new Error('Verge genesis transaction disagrees with Core');
+      }
+      return { ...genesis.tx[0], confirmations: genesis.confirmations, blockhash, blocktime: genesis.time };
+    }
     const transaction = await this.bitcoindClient.getRawTransaction(txid, true, blockhash);
     if (transaction.txid !== txid || transaction.in_active_chain === false ||
         await this.bitcoindClient.getBlockHash(status.block_height) !== blockhash) {

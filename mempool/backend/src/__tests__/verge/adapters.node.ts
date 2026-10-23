@@ -245,6 +245,27 @@ test('Electrum direct lookup reports an unknown indexed transaction as absent', 
     getRawTransaction: async () => { throw Object.assign(new Error('Use -txindex'), { code: -5 }); },
   }, { restStatus: async () => { throw Object.assign(new Error('Not Found'), { response: { status: 404 } }); } });
   await assert.rejects(api.$getRawTransaction(txid), /No such mempool or blockchain transaction/);
+  const absent = await electrumAdapter({
+    getRawTransaction: async () => { throw Object.assign(new Error('Use -txindex'), { code: -5 }); },
+  }, { restStatus: async () => ({ data: { confirmed: false } }) });
+  await assert.rejects(absent.api.$getRawTransaction(txid), /No such mempool or blockchain transaction/);
+});
+
+test('Electrum direct lookup reconstructs the canonical genesis coinbase from Core block data', async () => {
+  const genesis = fixtures.blocks[0].block;
+  const txid = genesis.tx[0].txid;
+  let hintedRawCalls = 0;
+  const { api } = await electrumAdapter({
+    getBlockHash: async (height: number) => { assert.equal(height, 0); return genesis.hash; },
+    getBlock: async (hash: string) => { assert.equal(hash, genesis.hash); return genesis; },
+    getBlockHeader: async () => genesis,
+    getRawTransaction: async () => { hintedRawCalls++; throw Object.assign(new Error('Use -txindex'), { code: -5 }); },
+  }, { restStatus: async () => ({ data: { confirmed: true, block_height: 0, block_hash: genesis.hash } }) });
+  const result = await api.$getRawTransaction(txid);
+  assert.equal(result.txid, txid);
+  assert.equal(result.status.block_height, 0);
+  assert.equal(result.status.block_hash, genesis.hash);
+  assert.equal(hintedRawCalls, 1, 'Core genesis raw transaction is unavailable even with a block hint');
 });
 
 test('Electrum direct lookup preserves Core transport errors and requires a loopback index', async () => {
