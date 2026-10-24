@@ -9,7 +9,7 @@
   <script src="/resources/config.js"></script>
   <!-- END CONFIG -->
   <!-- CUSTOMIZATION -->
-  <script src="/resources/customize.js?v=verge-api-reference-1"></script>
+  <script src="/resources/customize.js?v=verge-public-navigation-1"></script>
   <!-- END CUSTOMIZATION -->
   <base href="/">
   <!-- META -->
@@ -31,6 +31,13 @@
   <link id="canonical" rel="canonical" href="/">
   <meta name="theme-color" content="#35bce1">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    #verge-api-link { position: fixed; right: 16px; bottom: 16px; z-index: 10000; padding: 9px 13px; border-radius: 999px; background: #124b68; color: #fff; font: 600 14px/1.4 system-ui, sans-serif; text-decoration: none; box-shadow: 0 2px 8px #0008; }
+    #verge-api-link:hover, #verge-api-link:focus { background: #17678e; text-decoration: underline; }
+  </style>
 </head>
-<body><app-root></app-root></body>
+<body>
+  <a id="verge-api-link" href="/api-docs.html">API reference</a>
+  <app-root></app-root>
+</body>
 </html>
