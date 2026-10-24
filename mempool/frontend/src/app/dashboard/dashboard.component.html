@@ -46,6 +46,7 @@
             <app-mempool-block-overview
               [index]="0"
               [resolution]="goggleResolution"
+              [transactionAreaScale]="stateService.isVerge ? 10 : 1"
               [filterFlags]="goggleFlags"
               [filterMode]="goggleMode"
               [gradientMode]="gradientMode"

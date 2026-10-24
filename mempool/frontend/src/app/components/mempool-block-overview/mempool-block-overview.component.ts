@@ -21,6 +21,7 @@ import { FilterMode, GradientMode } from '@app/shared/filters.utils';
 export class MempoolBlockOverviewComponent implements OnInit, OnDestroy, OnChanges, AfterViewInit {
   @Input() index: number;
   @Input() resolution = 86;
+  @Input() transactionAreaScale = 1;
   @Input() showFilters: boolean = false;
   @Input() overrideColors: ((tx: TxView) => Color) | null = null;
   @Input() filterFlags: bigint | undefined = undefined;
