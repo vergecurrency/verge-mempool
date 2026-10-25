@@ -5,27 +5,46 @@ import { activeVergeProfile } from './runtime';
 import { getVergeMiningStatistics } from './mining';
 import { getVergeFeePolicy } from './fee-policy';
 import { normalizeVergePeers, VergePeersSnapshot } from './peers';
+import { mergeVergePeerHistory } from './peers';
+import { loadVergePeerHistory, saveVergePeerHistory, vergePeerStorePath } from './peers-store';
+import logger from '../../logger';
 
 export function registerVergeRoutes(app: Application): void {
   if (!activeVergeProfile) { return; }
   app.get(config.MEMPOOL.API_URL_PREFIX + 'chain', (_req: Request, res: Response) => res.json(activeVergeProfile));
-  let peerSnapshot: VergePeersSnapshot | undefined;
-  let peerPending: Promise<VergePeersSnapshot> | undefined;
-  let peerExpires = 0;
-  app.get(config.MEMPOOL.API_URL_PREFIX + 'peers', async (_req: Request, res: Response) => {
-    try {
-      if (!peerSnapshot || Date.now() >= peerExpires) {
-        peerPending ??= bitcoinClient.getPeerInfo().then((raw: unknown) => normalizeVergePeers(raw));
-        try {
-          peerSnapshot = await peerPending;
-          peerExpires = Date.now() + 10000;
-        } finally { peerPending = undefined; }
-      }
-      res.setHeader('Cache-Control', 'public, max-age=10');
-      res.json(peerSnapshot);
-    } catch {
-      res.status(503).json({ error: 'Verge peers are temporarily unavailable' });
+  const peerStore = vergePeerStorePath(config.MEMPOOL.NETWORK);
+  let peerSnapshot: VergePeersSnapshot | null = null;
+  let peerStoreReadable = true;
+  try { peerSnapshot = loadVergePeerHistory(peerStore); }
+  catch {
+    peerStoreReadable = false;
+    logger.err('Verge peer history is unreadable; preserving it and disabling peer polling');
+  }
+  let peerPending: Promise<void> | undefined;
+  /** @asyncSafe Every RPC and persistence failure is handled inside the promise. */
+  const refreshPeers = (): Promise<void> => {
+    if (peerPending) { return peerPending; }
+    const pending = bitcoinClient.getPeerInfo().then((raw: unknown) => {
+      const current = normalizeVergePeers(raw);
+      const next = mergeVergePeerHistory(peerSnapshot, current);
+      saveVergePeerHistory(peerStore, next);
+      peerSnapshot = next;
+    }).catch(() => {
+      logger.warn('Verge peer refresh failed; retaining the last saved peer history');
+    }).finally(() => { peerPending = undefined; });
+    peerPending = pending;
+    return pending;
+  };
+  if (peerStoreReadable) {
+    void refreshPeers();
+    setInterval(() => { void refreshPeers(); }, 120000).unref();
+  }
+  app.get(config.MEMPOOL.API_URL_PREFIX + 'peers', (_req: Request, res: Response) => {
+    if (!peerSnapshot) {
+      res.status(503).json({ error: 'Verge peer history is temporarily unavailable' }); return;
     }
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    res.json(peerSnapshot);
   });
   app.get(config.MEMPOOL.API_URL_PREFIX + 'fees/policy', async (req: Request, res: Response) => {
     const bytes = req.query.bytes;

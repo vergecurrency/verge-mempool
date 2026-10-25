@@ -1,6 +1,6 @@
 import type { VergePeer } from '@interfaces/verge.interface';
 
-export type VergePeerSortKey = 'address' | 'lastSeen' | 'version';
+export type VergePeerSortKey = 'address' | 'lastSeen' | 'version' | 'smsgSupport';
 export type VergePeerSortDirection = 'asc' | 'desc';
 
 const naturalOrder = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
@@ -8,6 +8,10 @@ const naturalOrder = new Intl.Collator('en', { numeric: true, sensitivity: 'base
 export function sortVergePeers(peers: VergePeer[], key: VergePeerSortKey, direction: VergePeerSortDirection): VergePeer[] {
   const multiplier = direction === 'asc' ? 1 : -1;
   return [...peers].sort((left, right) => {
+    if (key === 'smsgSupport') {
+      return (Number(left.smsgSupport) - Number(right.smsgSupport)) * multiplier
+        || naturalOrder.compare(left.address, right.address);
+    }
     if (key === 'lastSeen') {
       if (left.lastSeen === null) { return right.lastSeen === null ? naturalOrder.compare(left.address, right.address) : 1; }
       if (right.lastSeen === null) { return -1; }

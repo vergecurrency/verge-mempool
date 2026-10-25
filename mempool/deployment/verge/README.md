@@ -79,6 +79,18 @@ selection and unqualified transaction tools remain disabled. The backend's
 `HTTP_HOST` is explicit; upstream's default listener behavior is preserved for
 other configurations.
 
+The Verge backend polls Core's `getpeerinfo` once at startup and every two
+minutes thereafter. `/api/v1/peers` serves the last saved snapshot without
+calling Core for each visitor. Public peer addresses remain in the list after
+disconnecting, with their last message time and last advertised version/SMSG
+service bit. Only current connections contribute to the connected counts;
+private/local peer names are never saved or returned. The backend stores this
+history atomically under the service account's
+`~/.local/state/verge-mempool/peers-NETWORK.json` by default, or at the absolute
+path in `VERGE_PEERS_STORE_PATH`. Keep this file in the persistent backend state
+directory and include it in backups. If it is unreadable, polling stops rather
+than replacing the history; repair it before restarting the backend.
+
 Review/copy the service units, update `/usr/bin/node` if necessary, run
 `systemd-analyze verify` on the actual server and start the indexer/backend.
 Service restarts retry transient Core/index synchronization failures; they do

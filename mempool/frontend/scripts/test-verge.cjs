@@ -30,6 +30,18 @@ test('peer columns sort naturally by address and advertised version, and chronol
   assert.equal(peers[0].address, '10.0.0.2:21102', 'sorting does not mutate the latest snapshot');
 });
 
+test('SMSG peer sorting places supporting peers first on the first click', () => {
+  const peers = [
+    { address: 'z.onion:21102', smsgSupport: false },
+    { address: 'b.onion:21102', smsgSupport: true },
+    { address: 'a.onion:21102', smsgSupport: true },
+  ];
+  assert.deepEqual(sortVergePeers(peers, 'smsgSupport', 'desc').map(p => p.address),
+    ['a.onion:21102', 'b.onion:21102', 'z.onion:21102']);
+  assert.deepEqual(sortVergePeers(peers, 'smsgSupport', 'asc').map(p => p.address),
+    ['z.onion:21102', 'a.onion:21102', 'b.onion:21102']);
+});
+
 test('canonical rollback snapshots lower the tip and leave response arrays intact', () => {
   const before = [{ id:'a',height:10 }, { id:'b',height:11 }, { id:'c',height:12 }];
   const copy = JSON.stringify(before);

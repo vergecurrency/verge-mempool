@@ -6,11 +6,13 @@ export interface VergePeer {
   lastSeen: number | null;
   version: string;
   smsgSupport: boolean;
+  connected: boolean;
 }
 
 export interface VergePeersSnapshot {
   count: number;
   privateLocalCount: number;
+  knownCount: number;
   updatedAt: string;
   peers: VergePeer[];
 }
@@ -51,6 +53,10 @@ function classifyAddress(value: unknown): { address: string | null; privateOrLoc
   return { address: value, privateOrLocal: false };
 }
 
+export function isPublicVergePeerAddress(address: unknown): address is string {
+  return classifyAddress(address).address !== null;
+}
+
 function advertisesSmsg(services: unknown): boolean {
   return typeof services === 'string' && /^[0-9a-f]{1,16}$/i.test(services)
     && (BigInt(`0x${services}`) & smsgServiceBit) !== 0n;
@@ -72,8 +78,26 @@ export function normalizeVergePeers(raw: unknown, now = Date.now()): VergePeersS
     const advertised: string = typeof peer.subver === 'string' ? peer.subver : '';
     const subver = Array.from(advertised).filter(character => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127).join('').slice(0, 80);
     peers.push({ address, direction: peer.inbound === true ? 'Inbound' : 'Outbound',
-      lastSeen, version: subver || 'Unknown', smsgSupport: advertisesSmsg(peer.services) });
+      lastSeen, version: subver || 'Unknown', smsgSupport: advertisesSmsg(peer.services), connected: true });
   }
   peers.sort((a, b) => (b.lastSeen ?? -1) - (a.lastSeen ?? -1) || a.address.localeCompare(b.address));
-  return { count: peers.length, privateLocalCount, updatedAt: new Date(now).toISOString(), peers };
+  return { count: peers.length, privateLocalCount, knownCount: peers.length,
+    updatedAt: new Date(now).toISOString(), peers };
+}
+
+/** Retain every public address ever observed; only current getpeerinfo peers are connected. */
+export function mergeVergePeerHistory(previous: VergePeersSnapshot | null, current: VergePeersSnapshot): VergePeersSnapshot {
+  const peers = new Map<string, VergePeer>();
+  for (const peer of previous?.peers ?? []) { peers.set(peer.address, { ...peer, connected: false }); }
+  for (const peer of current.peers) {
+    const old = peers.get(peer.address);
+    peers.set(peer.address, {
+      ...peer,
+      lastSeen: old && (old.lastSeen ?? -1) > (peer.lastSeen ?? -1) ? old.lastSeen : peer.lastSeen,
+      version: peer.version === 'Unknown' && old ? old.version : peer.version,
+    });
+  }
+  const all = [...peers.values()].sort((a, b) => (b.lastSeen ?? -1) - (a.lastSeen ?? -1) || a.address.localeCompare(b.address));
+  return { count: current.count, privateLocalCount: current.privateLocalCount,
+    knownCount: all.length, updatedAt: current.updatedAt, peers: all };
 }

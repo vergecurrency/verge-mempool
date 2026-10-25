@@ -18,6 +18,19 @@
   font-size: 0.9em;
 }
 
+.peer-copy {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.peer-copy:hover code { text-decoration: underline; }
+.peer-copy:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.peer-copied { margin-left: 0.5rem; color: var(--success); font-size: 0.85em; }
+
 th, td {
   padding: 0.8rem 1rem;
   vertical-align: middle;

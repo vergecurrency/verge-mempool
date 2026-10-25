@@ -20,14 +20,17 @@ export class VergePeersComponent implements OnInit, OnDestroy {
   sortDirection: VergePeerSortDirection = 'desc';
   loading = true;
   error = false;
+  copiedAddress: string | null = null;
+  copyError = false;
   private refreshSubscription?: Subscription;
+  private copiedTimer?: ReturnType<typeof setTimeout>;
 
   constructor(private apiService: ApiService, private seoService: SeoService) {}
 
   ngOnInit(): void {
-    this.seoService.setTitle('Connected Verge peers');
-    this.seoService.setDescription('Connected Verge peers and their advertised Core versions.');
-    this.refreshSubscription = timer(0, 15000).pipe(
+    this.seoService.setTitle('Known Verge peers');
+    this.seoService.setDescription('Current and previously seen Verge peers, their Core versions and SMSG support.');
+    this.refreshSubscription = timer(0, 120000).pipe(
       switchMap(() => this.apiService.getVergePeers$().pipe(
         catchError(() => { this.error = true; return of(null); }),
       )),
@@ -43,6 +46,7 @@ export class VergePeersComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.refreshSubscription?.unsubscribe();
+    if (this.copiedTimer) { clearTimeout(this.copiedTimer); }
   }
 
   toIso(timestamp: number): string {
@@ -52,7 +56,7 @@ export class VergePeersComponent implements OnInit, OnDestroy {
   sortBy(key: VergePeerSortKey): void {
     this.sortDirection = this.sortKey === key && this.sortDirection === 'asc' ? 'desc'
       : this.sortKey === key && this.sortDirection === 'desc' ? 'asc'
-      : key === 'lastSeen' ? 'desc' : 'asc';
+      : key === 'lastSeen' || key === 'smsgSupport' ? 'desc' : 'asc';
     this.sortKey = key;
     this.sortedPeers = sortVergePeers(this.snapshot?.peers ?? [], key, this.sortDirection);
   }
@@ -63,5 +67,31 @@ export class VergePeersComponent implements OnInit, OnDestroy {
 
   sortIndicator(key: VergePeerSortKey): string {
     return this.sortKey === key ? this.sortDirection === 'asc' ? '▲' : '▼' : '↕';
+  }
+
+  async copyPeerAddress(peer: VergePeer): Promise<void> {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(peer.address);
+      } else {
+        const field = document.createElement('textarea');
+        field.value = peer.address;
+        field.setAttribute('readonly', '');
+        field.style.position = 'fixed';
+        field.style.opacity = '0';
+        document.body.appendChild(field);
+        try {
+          field.select();
+          if (!document.execCommand('copy')) { throw new Error('Clipboard unavailable'); }
+        } finally { field.remove(); }
+      }
+      this.copiedAddress = peer.address;
+      this.copyError = false;
+      if (this.copiedTimer) { clearTimeout(this.copiedTimer); }
+      this.copiedTimer = setTimeout(() => { this.copiedAddress = null; }, 2000);
+    } catch {
+      this.copiedAddress = null;
+      this.copyError = true;
+    }
   }
 }

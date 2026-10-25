@@ -1,31 +1,32 @@
 <div class="container-xl py-4 peers-page">
   <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-3">
     <div>
-      <h1 class="mb-1">Connected peers</h1>
-      <p class="mb-0 text-muted">Verge nodes currently connected to this explorer's Core node.</p>
+      <h1 class="mb-1">Known peers</h1>
+      <p class="mb-0 text-muted">Current and previously seen Verge nodes connected to this explorer's Core node.</p>
     </div>
-    <span class="small text-muted" *ngIf="snapshot">Updated {{ snapshot.updatedAt | date:'mediumTime' }} · Refreshes every 15 seconds</span>
+    <span class="small text-muted" *ngIf="snapshot">Updated {{ snapshot.updatedAt | date:'mediumTime' }} · Refreshes every 2 minutes</span>
   </div>
 
   <div *ngIf="error" class="alert alert-warning" role="status">Peer information is temporarily unavailable. Retrying automatically.</div>
+  <div *ngIf="copyError" class="alert alert-warning" role="status">Could not copy the peer address. Please copy it manually.</div>
   <p *ngIf="loading" role="status">Loading connected peers…</p>
 
   <div *ngIf="snapshot as data" class="peer-panel">
-    <div class="peer-summary">{{ data.count }} public {{ data.count === 1 ? 'peer' : 'peers' }} connected · {{ data.privateLocalCount }} private/local {{ data.privateLocalCount === 1 ? 'peer' : 'peers' }} connected</div>
-    <p *ngIf="data.count === 0" class="p-3 mb-0">No public peer connections are currently available.</p>
-    <div *ngIf="data.count > 0" class="table-responsive">
+    <div class="peer-summary">{{ data.count }} public {{ data.count === 1 ? 'peer' : 'peers' }} connected · {{ data.privateLocalCount }} private/local {{ data.privateLocalCount === 1 ? 'peer' : 'peers' }} connected · {{ data.knownCount }} public {{ data.knownCount === 1 ? 'peer' : 'peers' }} seen overall</div>
+    <p *ngIf="data.knownCount === 0" class="p-3 mb-0">No public peer connections have been seen yet.</p>
+    <div *ngIf="data.knownCount > 0" class="table-responsive">
       <table class="table mb-0">
         <thead><tr>
           <th scope="col" [attr.aria-sort]="ariaSort('address')"><button type="button" class="peer-sort" (click)="sortBy('address')">Peer <span aria-hidden="true">{{ sortIndicator('address') }}</span></button></th>
           <th scope="col">Connection</th>
           <th scope="col" [attr.aria-sort]="ariaSort('lastSeen')"><button type="button" class="peer-sort" (click)="sortBy('lastSeen')">Last heard from <span aria-hidden="true">{{ sortIndicator('lastSeen') }}</span></button></th>
           <th scope="col" [attr.aria-sort]="ariaSort('version')"><button type="button" class="peer-sort" (click)="sortBy('version')">Version <span aria-hidden="true">{{ sortIndicator('version') }}</span></button></th>
-          <th scope="col">SMSG Support</th>
+          <th scope="col" [attr.aria-sort]="ariaSort('smsgSupport')"><button type="button" class="peer-sort" (click)="sortBy('smsgSupport')">SMSG Support <span aria-hidden="true">{{ sortIndicator('smsgSupport') }}</span></button></th>
         </tr></thead>
         <tbody>
           <tr *ngFor="let peer of sortedPeers">
-            <td class="peer-address"><code>{{ peer.address }}</code></td>
-            <td>{{ peer.direction }}</td>
+            <td class="peer-address"><button type="button" class="peer-copy" (click)="copyPeerAddress(peer)" [attr.aria-label]="'Copy peer address ' + peer.address" title="Copy peer address"><code>{{ peer.address }}</code></button><span *ngIf="copiedAddress === peer.address" class="peer-copied" role="status">Copied</span></td>
+            <td>{{ peer.connected ? peer.direction : 'Disconnected' }}</td>
             <td><time *ngIf="peer.lastSeen as lastSeen; else neverSeen" [attr.datetime]="toIso(lastSeen)">{{ lastSeen | date:'medium' }}</time><ng-template #neverSeen>Not yet seen</ng-template></td>
             <td class="peer-version">{{ peer.version }}</td>
             <td>{{ peer.smsgSupport ? 'Yes' : 'No' }}</td>
@@ -34,5 +35,5 @@
       </table>
     </div>
   </div>
-  <p class="small text-muted mt-3">Last heard from means the last message received by this node. Peer versions and SMSG support are advertised by peers. Private and local addresses are omitted.</p>
+  <p class="small text-muted mt-3">Click a peer address to copy it with its port. The list retains previously seen public peers. Last heard from means the last message received by this node. Peer versions and SMSG support are last advertised values. Private and local addresses are omitted.</p>
 </div>

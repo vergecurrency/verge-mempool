@@ -22,11 +22,13 @@ export interface VergePeer {
   lastSeen: number | null;
   version: string;
   smsgSupport: boolean;
+  connected: boolean;
 }
 
 export interface VergePeersSnapshot {
   count: number;
   privateLocalCount: number;
+  knownCount: number;
   updatedAt: string;
   peers: VergePeer[];
 }
