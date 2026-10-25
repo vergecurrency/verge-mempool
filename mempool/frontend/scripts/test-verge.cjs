@@ -14,6 +14,21 @@ function loadShared(name) {
 }
 const { canonicalBlockWindow, matchesBlockExtension, snapshotChangesBranch, chainDisplay, formatVergeAmount, assertSafeVergeAmounts, vergeAddressType, assertVergeChainIdentity } = loadShared('chain-profile');
 const { AddressStats } = loadShared('address-stats');
+const { sortVergePeers } = loadShared('verge-peers');
+
+test('peer columns sort naturally by address and advertised version, and chronologically by last message', () => {
+  const peer = (address, version, lastSeen) => ({ address, direction: 'Outbound', version, lastSeen });
+  const peers = [peer('10.0.0.2:21102', '/verge:26.10.0/', null),
+    peer('2.0.0.2:21102', '/verge:8.3.0/', 2000),
+    peer('8.0.0.2:21102', '/verge:26.8.0/', 1000)];
+  assert.deepEqual(sortVergePeers(peers, 'address', 'asc').map(p => p.address),
+    ['2.0.0.2:21102', '8.0.0.2:21102', '10.0.0.2:21102']);
+  assert.deepEqual(sortVergePeers(peers, 'version', 'asc').map(p => p.version),
+    ['/verge:8.3.0/', '/verge:26.8.0/', '/verge:26.10.0/']);
+  assert.deepEqual(sortVergePeers(peers, 'lastSeen', 'desc').map(p => p.lastSeen), [2000, 1000, null]);
+  assert.deepEqual(sortVergePeers(peers, 'lastSeen', 'asc').map(p => p.lastSeen), [1000, 2000, null]);
+  assert.equal(peers[0].address, '10.0.0.2:21102', 'sorting does not mutate the latest snapshot');
+});
 
 test('canonical rollback snapshots lower the tip and leave response arrays intact', () => {
   const before = [{ id:'a',height:10 }, { id:'b',height:11 }, { id:'c',height:12 }];

@@ -11,21 +11,28 @@
   <p *ngIf="loading" role="status">Loading connected peers…</p>
 
   <div *ngIf="snapshot as data" class="peer-panel">
-    <div class="peer-summary">{{ data.count }} public {{ data.count === 1 ? 'peer' : 'peers' }} connected</div>
+    <div class="peer-summary">{{ data.count }} public {{ data.count === 1 ? 'peer' : 'peers' }} connected · {{ data.privateLocalCount }} private/local {{ data.privateLocalCount === 1 ? 'peer' : 'peers' }} connected</div>
     <p *ngIf="data.count === 0" class="p-3 mb-0">No public peer connections are currently available.</p>
     <div *ngIf="data.count > 0" class="table-responsive">
       <table class="table mb-0">
-        <thead><tr><th scope="col">Peer</th><th scope="col">Connection</th><th scope="col">Last heard from</th><th scope="col">Advertised Core version</th></tr></thead>
+        <thead><tr>
+          <th scope="col" [attr.aria-sort]="ariaSort('address')"><button type="button" class="peer-sort" (click)="sortBy('address')">Peer <span aria-hidden="true">{{ sortIndicator('address') }}</span></button></th>
+          <th scope="col">Connection</th>
+          <th scope="col" [attr.aria-sort]="ariaSort('lastSeen')"><button type="button" class="peer-sort" (click)="sortBy('lastSeen')">Last heard from <span aria-hidden="true">{{ sortIndicator('lastSeen') }}</span></button></th>
+          <th scope="col" [attr.aria-sort]="ariaSort('version')"><button type="button" class="peer-sort" (click)="sortBy('version')">Version <span aria-hidden="true">{{ sortIndicator('version') }}</span></button></th>
+          <th scope="col">SMSG Support</th>
+        </tr></thead>
         <tbody>
-          <tr *ngFor="let peer of data.peers">
+          <tr *ngFor="let peer of sortedPeers">
             <td class="peer-address"><code>{{ peer.address }}</code></td>
             <td>{{ peer.direction }}</td>
             <td><time *ngIf="peer.lastSeen as lastSeen; else neverSeen" [attr.datetime]="toIso(lastSeen)">{{ lastSeen | date:'medium' }}</time><ng-template #neverSeen>Not yet seen</ng-template></td>
             <td class="peer-version">{{ peer.version }}</td>
+            <td>{{ peer.smsgSupport ? 'Yes' : 'No' }}</td>
           </tr>
         </tbody>
       </table>
     </div>
   </div>
-  <p class="small text-muted mt-3">Last heard from means the last message received by this node. Peer versions are self-reported. Private and local addresses are omitted.</p>
+  <p class="small text-muted mt-3">Last heard from means the last message received by this node. Peer versions and SMSG support are advertised by peers. Private and local addresses are omitted.</p>
 </div>

@@ -21,10 +21,12 @@ export interface VergePeer {
   direction: 'Inbound' | 'Outbound';
   lastSeen: number | null;
   version: string;
+  smsgSupport: boolean;
 }
 
 export interface VergePeersSnapshot {
   count: number;
+  privateLocalCount: number;
   updatedAt: string;
   peers: VergePeer[];
 }

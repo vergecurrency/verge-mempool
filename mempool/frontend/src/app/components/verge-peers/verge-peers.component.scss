@@ -22,3 +22,18 @@ th, td {
   padding: 0.8rem 1rem;
   vertical-align: middle;
 }
+
+.peer-sort {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.peer-sort:hover { opacity: 0.75; }
+.peer-sort:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
