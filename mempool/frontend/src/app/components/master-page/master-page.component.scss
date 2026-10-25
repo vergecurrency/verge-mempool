@@ -11,6 +11,14 @@ li.nav-item.active {
   background-color: var(--tertiary);
 }
 
+.peers-nav-label {
+  display: block;
+  font-size: 0.65rem;
+  line-height: 1;
+  margin-top: -5px;
+  text-align: center;
+}
+
 fa-icon {
   font-size: 1.66em;
 }

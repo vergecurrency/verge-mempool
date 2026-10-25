@@ -4,10 +4,29 @@ import bitcoinClient from '../bitcoin/bitcoin-client';
 import { activeVergeProfile } from './runtime';
 import { getVergeMiningStatistics } from './mining';
 import { getVergeFeePolicy } from './fee-policy';
+import { normalizeVergePeers, VergePeersSnapshot } from './peers';
 
 export function registerVergeRoutes(app: Application): void {
   if (!activeVergeProfile) { return; }
   app.get(config.MEMPOOL.API_URL_PREFIX + 'chain', (_req: Request, res: Response) => res.json(activeVergeProfile));
+  let peerSnapshot: VergePeersSnapshot | undefined;
+  let peerPending: Promise<VergePeersSnapshot> | undefined;
+  let peerExpires = 0;
+  app.get(config.MEMPOOL.API_URL_PREFIX + 'peers', async (_req: Request, res: Response) => {
+    try {
+      if (!peerSnapshot || Date.now() >= peerExpires) {
+        peerPending ??= bitcoinClient.getPeerInfo().then((raw: unknown) => normalizeVergePeers(raw));
+        try {
+          peerSnapshot = await peerPending;
+          peerExpires = Date.now() + 10000;
+        } finally { peerPending = undefined; }
+      }
+      res.setHeader('Cache-Control', 'public, max-age=10');
+      res.json(peerSnapshot);
+    } catch {
+      res.status(503).json({ error: 'Verge peers are temporarily unavailable' });
+    }
+  });
   app.get(config.MEMPOOL.API_URL_PREFIX + 'fees/policy', async (req: Request, res: Response) => {
     const bytes = req.query.bytes;
     if (bytes !== undefined && (typeof bytes !== 'string' || !/^[1-9]\d{0,6}$/.test(bytes) || Number(bytes) > 1000000)) {

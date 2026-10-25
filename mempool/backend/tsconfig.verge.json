@@ -12,6 +12,7 @@
     "src/api/verge/electrum-probe.ts",
     "src/api/verge/fee-policy.ts",
     "src/api/verge/mining.ts",
+    "src/api/verge/peers.ts",
     "src/api/verge/rpc.ts",
     "src/__tests__/verge/**/*.node.ts"
   ]

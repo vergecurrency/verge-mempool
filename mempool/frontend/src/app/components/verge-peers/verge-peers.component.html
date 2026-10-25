@@ -1,0 +1,31 @@
+<div class="container-xl py-4 peers-page">
+  <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-3">
+    <div>
+      <h1 class="mb-1">Connected peers</h1>
+      <p class="mb-0 text-muted">Verge nodes currently connected to this explorer's Core node.</p>
+    </div>
+    <span class="small text-muted" *ngIf="snapshot">Updated {{ snapshot.updatedAt | date:'mediumTime' }} · Refreshes every 15 seconds</span>
+  </div>
+
+  <div *ngIf="error" class="alert alert-warning" role="status">Peer information is temporarily unavailable. Retrying automatically.</div>
+  <p *ngIf="loading" role="status">Loading connected peers…</p>
+
+  <div *ngIf="snapshot as data" class="peer-panel">
+    <div class="peer-summary">{{ data.count }} public {{ data.count === 1 ? 'peer' : 'peers' }} connected</div>
+    <p *ngIf="data.count === 0" class="p-3 mb-0">No public peer connections are currently available.</p>
+    <div *ngIf="data.count > 0" class="table-responsive">
+      <table class="table mb-0">
+        <thead><tr><th scope="col">Peer</th><th scope="col">Connection</th><th scope="col">Last heard from</th><th scope="col">Advertised Core version</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let peer of data.peers">
+            <td class="peer-address"><code>{{ peer.address }}</code></td>
+            <td>{{ peer.direction }}</td>
+            <td><time *ngIf="peer.lastSeen as lastSeen; else neverSeen" [attr.datetime]="toIso(lastSeen)">{{ lastSeen | date:'medium' }}</time><ng-template #neverSeen>Not yet seen</ng-template></td>
+            <td class="peer-version">{{ peer.version }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p class="small text-muted mt-3">Last heard from means the last message received by this node. Peer versions are self-reported. Private and local addresses are omitted.</p>
+</div>

@@ -15,3 +15,16 @@ export interface VergeMiningStatistics {
     blocksInSample: number;
   }[];
 }
+
+export interface VergePeer {
+  address: string;
+  direction: 'Inbound' | 'Outbound';
+  lastSeen: number | null;
+  version: string;
+}
+
+export interface VergePeersSnapshot {
+  count: number;
+  updatedAt: string;
+  peers: VergePeer[];
+}

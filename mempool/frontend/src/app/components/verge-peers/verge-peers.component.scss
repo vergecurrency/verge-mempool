@@ -1,0 +1,24 @@
+.peer-panel {
+  border: 1px solid var(--secondary);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.peer-summary {
+  background: var(--tertiary);
+  font-weight: 600;
+  padding: 0.85rem 1rem;
+}
+
+.peer-address, .peer-version {
+  overflow-wrap: anywhere;
+}
+
+.peer-address code {
+  font-size: 0.9em;
+}
+
+th, td {
+  padding: 0.8rem 1rem;
+  vertical-align: middle;
+}

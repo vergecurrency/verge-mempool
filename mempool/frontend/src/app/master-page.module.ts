@@ -46,6 +46,10 @@ const routes: Routes = [
         component: TestTransactionsComponent,
       },
       {
+        path: 'peers',
+        loadComponent: () => import('@components/verge-peers/verge-peers.component').then(m => m.VergePeersComponent),
+      },
+      {
         path: 'about',
         loadChildren: () => import('@components/about/about.module').then(m => m.AboutModule),
       },
@@ -125,6 +129,8 @@ if (browserWindowEnv.CHAIN === 'verge') {
   const unavailable = new Set(['tx/push', 'pushtx', 'tx/test', 'rbf', 'lightning', 'docs', 'api', 'terms-of-service', 'privacy-policy', 'trademark-policy']);
   routes[0].children = routes[0].children.map(route => unavailable.has(route.path)
     ? { path: route.path, children: [{ path: '**', component: VergeUnavailableComponent }] } : route);
+} else {
+  routes[0].children = routes[0].children.filter(route => route.path !== 'peers');
 }
 
 if (window['__env']?.OFFICIAL_MEMPOOL_SPACE) {

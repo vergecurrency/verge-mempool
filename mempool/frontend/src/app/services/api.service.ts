@@ -10,7 +10,7 @@ import { StorageService } from '@app/services/storage.service';
 import { WebsocketResponse } from '@interfaces/websocket.interface';
 import { TxAuditStatus } from '@components/transaction/transaction.component';
 import { MinersService } from '@app/services/miners.service';
-import { VergeMiningStatistics } from '@interfaces/verge.interface';
+import { VergeMiningStatistics, VergePeersSnapshot } from '@interfaces/verge.interface';
 
 @Injectable({
   providedIn: 'root'
@@ -49,6 +49,10 @@ export class ApiService {
 
   getVergeMiningStatistics$(): Observable<VergeMiningStatistics> {
     return this.httpClient.get<VergeMiningStatistics>(this.apiBaseUrl + this.apiBasePath + '/api/v1/mining/algorithms');
+  }
+
+  getVergePeers$(): Observable<VergePeersSnapshot> {
+    return this.httpClient.get<VergePeersSnapshot>(this.apiBaseUrl + this.apiBasePath + '/api/v1/peers');
   }
 
   // delete expired cache entries

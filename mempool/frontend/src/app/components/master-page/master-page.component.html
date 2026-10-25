@@ -122,6 +122,12 @@
           <div class="svg-wrapper"><app-svg-images name="nav-enterprise" width="21.59" height="100%"></app-svg-images></div>
         </a>
       </li>
+      <li class="nav-item" routerLinkActive="active" id="btn-peers" *ngIf="stateService.isVerge">
+        <a class="nav-link" [routerLink]="['/peers' | relativeUrl]" (click)="collapse()" aria-label="Peers" title="Peers">
+          <div class="svg-wrapper"><app-svg-images name="nav-peers" width="21.59" height="100%"></app-svg-images></div>
+          <span class="peers-nav-label">Peers</span>
+        </a>
+      </li>
       <li class="nav-item" routerLinkActive="active" id="btn-about">
         <a class="nav-link" [routerLink]="['/about']" (click)="collapse()">
           <div class="svg-wrapper"><app-svg-images name="nav-info-circle" width="21.59" height="100%"></app-svg-images></div>
