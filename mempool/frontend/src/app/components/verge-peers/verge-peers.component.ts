@@ -3,7 +3,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ApiService } from '@app/services/api.service';
 import { SeoService } from '@app/services/seo.service';
 import { VergePeer, VergePeersSnapshot } from '@interfaces/verge.interface';
-import { sortVergePeers, VergePeerSortDirection, VergePeerSortKey } from '@app/shared/verge-peers';
+import { paginateVergePeers, sortVergePeers, VergePeerSortDirection, VergePeerSortKey } from '@app/shared/verge-peers';
 import { Subscription, catchError, of, switchMap, timer } from 'rxjs';
 
 @Component({
@@ -16,6 +16,11 @@ import { Subscription, catchError, of, switchMap, timer } from 'rxjs';
 export class VergePeersComponent implements OnInit, OnDestroy {
   snapshot: VergePeersSnapshot | null = null;
   sortedPeers: VergePeer[] = [];
+  pagePeers: VergePeer[] = [];
+  page = 1;
+  pageCount = 1;
+  pageFrom = 0;
+  pageTo = 0;
   sortKey: VergePeerSortKey = 'lastSeen';
   sortDirection: VergePeerSortDirection = 'desc';
   loading = true;
@@ -38,6 +43,7 @@ export class VergePeersComponent implements OnInit, OnDestroy {
       if (snapshot) {
         this.snapshot = snapshot;
         this.sortedPeers = sortVergePeers(snapshot.peers, this.sortKey, this.sortDirection);
+        this.showPage(this.page);
         this.error = false;
       }
       this.loading = false;
@@ -59,6 +65,16 @@ export class VergePeersComponent implements OnInit, OnDestroy {
       : key === 'lastSeen' || key === 'smsgSupport' ? 'desc' : 'asc';
     this.sortKey = key;
     this.sortedPeers = sortVergePeers(this.snapshot?.peers ?? [], key, this.sortDirection);
+    this.showPage(1);
+  }
+
+  showPage(requestedPage: number): void {
+    const result = paginateVergePeers(this.sortedPeers, requestedPage);
+    this.pagePeers = result.peers;
+    this.page = result.page;
+    this.pageCount = result.pageCount;
+    this.pageFrom = result.from;
+    this.pageTo = result.to;
   }
 
   ariaSort(key: VergePeerSortKey): string | null {

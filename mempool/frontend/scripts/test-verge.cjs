@@ -14,7 +14,21 @@ function loadShared(name) {
 }
 const { canonicalBlockWindow, matchesBlockExtension, snapshotChangesBranch, chainDisplay, formatVergeAmount, assertSafeVergeAmounts, vergeAddressType, assertVergeChainIdentity } = loadShared('chain-profile');
 const { AddressStats } = loadShared('address-stats');
-const { sortVergePeers } = loadShared('verge-peers');
+const { sortVergePeers, paginateVergePeers } = loadShared('verge-peers');
+
+test('peer pages contain at most twenty sorted entries and clamp when the list changes', () => {
+  const peers = Array.from({ length: 46 }, (_, index) => ({ address: `peer-${index + 1}` }));
+  const first = paginateVergePeers(peers, 1);
+  const middle = paginateVergePeers(peers, 2);
+  const last = paginateVergePeers(peers, 3);
+  assert.deepEqual([first.peers.length, middle.peers.length, last.peers.length], [20, 20, 6]);
+  assert.deepEqual([first.from, first.to, middle.from, middle.to, last.from, last.to], [1, 20, 21, 40, 41, 46]);
+  assert.equal(last.pageCount, 3);
+  assert.equal(paginateVergePeers(peers, 99).page, 3);
+  assert.equal(paginateVergePeers(peers.slice(0, 21), 3).page, 2);
+  assert.equal(paginateVergePeers([], 1).peers.length, 0);
+  assert.equal(peers.length, 46, 'pagination does not change the stored list');
+});
 
 test('peer columns sort naturally by address and advertised version, and chronologically by last message', () => {
   const peer = (address, version, lastSeen) => ({ address, direction: 'Outbound', version, lastSeen });

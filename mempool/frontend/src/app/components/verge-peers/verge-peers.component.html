@@ -14,6 +14,11 @@
   <div *ngIf="snapshot as data" class="peer-panel">
     <div class="peer-summary">{{ data.count }} public {{ data.count === 1 ? 'peer' : 'peers' }} connected · {{ data.privateLocalCount }} private/local {{ data.privateLocalCount === 1 ? 'peer' : 'peers' }} connected · {{ data.knownCount }} public {{ data.knownCount === 1 ? 'peer' : 'peers' }} seen overall</div>
     <p *ngIf="data.knownCount === 0" class="p-3 mb-0">No public peer connections have been seen yet.</p>
+    <nav *ngIf="pageCount > 1" class="peer-pagination peer-pagination--top" aria-label="Peer pages above list">
+      <button type="button" class="peer-page-button" (click)="showPage(page - 1)" [disabled]="page === 1" aria-label="Previous peer page">← Back</button>
+      <span class="peer-page-status">Showing {{ pageFrom }}–{{ pageTo }} of {{ data.knownCount }} <span class="peer-page-number">· Page {{ page }} of {{ pageCount }}</span></span>
+      <button type="button" class="peer-page-button" (click)="showPage(page + 1)" [disabled]="page === pageCount" aria-label="Next peer page">Forward →</button>
+    </nav>
     <div *ngIf="data.knownCount > 0" class="table-responsive">
       <table class="table mb-0">
         <thead><tr>
@@ -24,7 +29,7 @@
           <th scope="col" [attr.aria-sort]="ariaSort('smsgSupport')"><button type="button" class="peer-sort" (click)="sortBy('smsgSupport')">SMSG Support <span aria-hidden="true">{{ sortIndicator('smsgSupport') }}</span></button></th>
         </tr></thead>
         <tbody>
-          <tr *ngFor="let peer of sortedPeers">
+          <tr *ngFor="let peer of pagePeers">
             <td class="peer-address"><button type="button" class="peer-copy" (click)="copyPeerAddress(peer)" [attr.aria-label]="'Copy peer address ' + peer.address" title="Copy peer address"><code>{{ peer.address }}</code></button><span *ngIf="copiedAddress === peer.address" class="peer-copied" role="status">Copied</span></td>
             <td>{{ peer.connected ? peer.direction : 'Disconnected' }}</td>
             <td><time *ngIf="peer.lastSeen as lastSeen; else neverSeen" [attr.datetime]="toIso(lastSeen)">{{ lastSeen | date:'medium' }}</time><ng-template #neverSeen>Not yet seen</ng-template></td>
@@ -34,6 +39,11 @@
         </tbody>
       </table>
     </div>
+    <nav *ngIf="pageCount > 1" class="peer-pagination peer-pagination--bottom" aria-label="Peer pages below list">
+      <button type="button" class="peer-page-button" (click)="showPage(page - 1)" [disabled]="page === 1" aria-label="Previous peer page">← Back</button>
+      <span class="peer-page-status">Showing {{ pageFrom }}–{{ pageTo }} of {{ data.knownCount }} <span class="peer-page-number">· Page {{ page }} of {{ pageCount }}</span></span>
+      <button type="button" class="peer-page-button" (click)="showPage(page + 1)" [disabled]="page === pageCount" aria-label="Next peer page">Forward →</button>
+    </nav>
   </div>
   <p class="small text-muted mt-3">Click a peer address to copy it with its port. The list retains previously seen public peers. Last heard from means the last message received by this node. Peer versions and SMSG support are last advertised values. Private and local addresses are omitted.</p>
 </div>

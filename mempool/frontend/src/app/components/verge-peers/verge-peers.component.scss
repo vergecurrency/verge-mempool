@@ -10,6 +10,44 @@
   padding: 0.85rem 1rem;
 }
 
+.peer-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  background: var(--tertiary);
+}
+
+.peer-pagination--top { border-top: 1px solid var(--secondary); }
+.peer-pagination--bottom { border-top: 1px solid var(--secondary); }
+
+.peer-page-status { text-align: center; font-size: 0.9rem; }
+.peer-page-number { white-space: nowrap; }
+
+.peer-page-button {
+  min-width: 6.5rem;
+  border: 1px solid var(--secondary);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.peer-page-button:hover:not(:disabled) { background: var(--secondary); }
+.peer-page-button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.peer-page-button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+@media (max-width: 520px) {
+  .peer-pagination { gap: 0.4rem; padding: 0.7rem; }
+  .peer-page-button { min-width: auto; padding: 0.35rem 0.5rem; }
+  .peer-page-status { font-size: 0.8rem; }
+  .peer-page-number { display: block; }
+}
+
 .peer-address, .peer-version {
   overflow-wrap: anywhere;
 }
