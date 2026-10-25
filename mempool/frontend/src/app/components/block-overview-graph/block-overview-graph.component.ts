@@ -9,7 +9,7 @@ import { Price } from '@app/services/price.service';
 import { StateService } from '@app/services/state.service';
 import { ThemeService } from '@app/services/theme.service';
 import { Subscription } from 'rxjs';
-import { defaultColorFunction, setOpacity, defaultAuditColors, defaultColors, ageColorFunction, contrastColorFunction, contrastAuditColors, contrastColors } from '@components/block-overview-graph/utils';
+import { defaultColorFunction, setOpacity, defaultAuditColors, defaultColors, ageColorFunction, contrastColorFunction, contrastAuditColors, contrastColors, retrowaveAuditColors, retrowaveColors } from '@components/block-overview-graph/utils';
 import { ActiveFilter, FilterMode, toFlags } from '@app/shared/filters.utils';
 import { detectWebGL } from '@app/shared/graphs.utils';
 
@@ -29,6 +29,14 @@ const unmatchedContrastAuditColors = {
   added_prioritized: setOpacity(contrastAuditColors.added_prioritized, unmatchedOpacity),
   prioritized: setOpacity(contrastAuditColors.prioritized, unmatchedOpacity),
   accelerated: setOpacity(contrastAuditColors.accelerated, unmatchedOpacity),
+};
+const unmatchedRetrowaveAuditColors = {
+  censored: setOpacity(retrowaveAuditColors.censored, unmatchedOpacity),
+  missing: setOpacity(retrowaveAuditColors.missing, unmatchedOpacity),
+  added: setOpacity(retrowaveAuditColors.added, unmatchedOpacity),
+  added_prioritized: setOpacity(retrowaveAuditColors.added_prioritized, unmatchedOpacity),
+  prioritized: setOpacity(retrowaveAuditColors.prioritized, unmatchedOpacity),
+  accelerated: setOpacity(retrowaveAuditColors.accelerated, unmatchedOpacity),
 };
 
 @Component({
@@ -675,12 +683,23 @@ export class BlockOverviewGraphComponent implements AfterViewInit, OnDestroy, On
           break;
       }
       if (matches) {
+        if (this.loadedTheme === 'retrowave') {
+          return (gradient === 'age') ? ageColorFunction(tx, retrowaveColors.fee, retrowaveAuditColors, this.relativeTime || (Date.now() / 1000)) : defaultColorFunction(tx, retrowaveColors.fee, retrowaveAuditColors, this.relativeTime || (Date.now() / 1000));
+        }
         if (this.loadedTheme !== 'contrast' && this.loadedTheme !== 'bukele') {
           return (gradient === 'age') ? ageColorFunction(tx, defaultColors.fee, defaultAuditColors, this.relativeTime || (Date.now() / 1000)) : defaultColorFunction(tx, defaultColors.fee, defaultAuditColors, this.relativeTime || (Date.now() / 1000));
         } else {
           return (gradient === 'age') ? ageColorFunction(tx, contrastColors.fee, contrastAuditColors, this.relativeTime || (Date.now() / 1000)) : contrastColorFunction(tx, contrastColors.fee, contrastAuditColors, this.relativeTime || (Date.now() / 1000));
         }
       } else {
+        if (this.loadedTheme === 'retrowave') {
+          return (gradient === 'age') ? { r: 1, g: 1, b: 1, a: 0.05 } : defaultColorFunction(
+            tx,
+            retrowaveColors.unmatchedfee,
+            unmatchedRetrowaveAuditColors,
+            this.relativeTime || (Date.now() / 1000)
+          );
+        }
         if (this.loadedTheme !== 'contrast' && this.loadedTheme !== 'bukele') {
           return (gradient === 'age') ? { r: 1, g: 1, b: 1, a: 0.05 } : defaultColorFunction(
             tx,

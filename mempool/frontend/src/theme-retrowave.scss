@@ -1,0 +1,185 @@
+@use "sass:color";
+
+// Midnight indigo, electric cyan and a restrained sunset glow.
+$bg: #14112f;
+$active-bg: #0c0d24;
+$hover-bg: #2a1b4d;
+$fg: #f7edff;
+$nav-bg: #11102e;
+$title-fg: #ff86c8;
+$primary: #a82171;
+$secondary: #291b46;
+$tertiary: #7235ba;
+$success: #1b7b70;
+$info: #7beaff;
+$link-color: $info;
+$link-hover-color: color.adjust($link-color, $lightness: 10%);
+
+:root {
+  --bg: #{$bg};
+  --active-bg: #{$active-bg};
+  --hover-bg: #{$hover-bg};
+  --fg: #{$fg};
+  --nav-bg: #{$nav-bg};
+  --nav-icon: #f7edff;
+  --nav-shadow: #050515;
+  --title-fg: #{$title-fg};
+
+  --primary: #{$primary};
+  --secondary: #{$secondary};
+  --tertiary: #{$tertiary};
+  --success: #{$success};
+  --info: #{$info};
+  --link-color: #{$link-color};
+  --link-hover-color: #{$link-hover-color};
+  --icon: #f7edff;
+  --skeleton-bg: #2d2450;
+  --skeleton-bg-light: #493466;
+
+  --box-bg: #181334;
+  --stat-box-bg: #21173d;
+  --border-subtle: rgba(255, 134, 200, 0.22);
+  --block-top: #38245a;
+  --block-side: #24173d;
+  --block-goggles-overlay: #1a103ac7;
+  --mempool-block-top: #4c285b;
+  --mempool-block-side: #321c4b;
+  --mempool-block-loading: #604170;
+  --alert-bg: #4a245e;
+  --navbar-bg: #11102e;
+  --transparent-fg: #f7edffbd;
+  --footer-fg: #c4b8db;
+  --fade-out-box-bg-start: rgba(24, 19, 52, 0);
+  --fade-out-box-bg-end: rgba(24, 19, 52, 1);
+  --opacity: 0.82;
+  --world-map-bg: #211839;
+  --world-map-border: #704270;
+
+  --testnet: #274d70;
+  --signet: #6d2c68;
+  --regtest: #54516d;
+  --liquid: #176962;
+  --liquidtestnet: #41465f;
+  --mainnet-alt: #ee6db2;
+  --testnet-alt: #3b6693;
+  --signet-alt: #9b4a92;
+  --regtest-alt: #77718e;
+  --liquidtestnet-alt: #626880;
+
+  --taproot: #ffbc72;
+  --taproot-light: #ffd5a0;
+  --taproot-dark: #a35a4d;
+  --green: #49d6bd;
+  --red: #ff7896;
+  --yellow: #ffd58e;
+  --grey: #b6a9cc;
+  --tooltip-grey: #c7b8d9;
+  --orange: #ffad76;
+  --pink: #ff86c8;
+  --search-button: #{$tertiary};
+  --search-button-border: #9d5be2;
+  --search-button-focus: #8746ce;
+  --search-button-shadow: #c678e780;
+
+  --bs-body-color: #{$fg};
+  --bs-body-bg: #{$active-bg};
+  --bs-card-color: #{$fg};
+  --bs-primary-rgb: 168, 33, 113;
+  --bs-info-rgb: 123, 234, 255;
+}
+
+body {
+  background-color: $active-bg;
+  background-image:
+    radial-gradient(ellipse 75% 45% at 50% -10%, rgba(255, 115, 184, 0.18), transparent 75%),
+    linear-gradient(rgba(123, 234, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(123, 234, 255, 0.025) 1px, transparent 1px);
+  background-size: auto, 44px 44px, 44px 44px;
+  background-attachment: fixed;
+}
+
+.navbar {
+  background: linear-gradient(90deg, #100f2a, #24143f 52%, #12102e);
+  border-bottom: 1px solid rgba(255, 134, 200, 0.26);
+  box-shadow: 0 4px 22px rgba(4, 5, 19, 0.35);
+}
+
+.card, .box, .dropdown-menu, .modal-content {
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 10px 30px rgba(3, 4, 20, 0.27), 0 0 20px rgba(203, 73, 176, 0.06);
+}
+
+.card, .dropdown-menu, .modal-content {
+  background-color: $bg;
+  color: $fg;
+}
+
+.dashboard-container .card:hover {
+  border-color: rgba(255, 134, 200, 0.38);
+}
+
+.main-title, .card-title {
+  color: $title-fg;
+  letter-spacing: 0.035em;
+  text-shadow: 0 0 18px rgba(255, 95, 180, 0.2);
+}
+
+a:not(.btn) {
+  color: $link-color;
+}
+
+a:not(.btn):hover, a:not(.btn):focus-visible {
+  color: $link-hover-color;
+}
+
+.form-control, .form-select, .input-group-text {
+  color: $fg;
+  background-color: $secondary;
+  border-color: #684274;
+}
+
+.form-control:focus, .form-select:focus {
+  color: $fg;
+  background-color: #31204e;
+  border-color: $info;
+  box-shadow: 0 0 0 0.2rem rgba(123, 234, 255, 0.16);
+}
+
+:focus-visible {
+  outline: 2px solid $info !important;
+  outline-offset: 2px;
+}
+
+.btn-primary, .btn-purple {
+  box-shadow: 0 4px 16px rgba(227, 65, 157, 0.2);
+}
+
+.nav-tabs .nav-link.active {
+  color: $fg;
+  background-color: $active-bg;
+  border-color: #75446f #75446f $active-bg;
+}
+
+.table, .table-striped, .dropdown-menu {
+  --bs-table-color: #{$fg};
+  --bs-table-border-color: rgba(255, 134, 200, 0.16);
+  --bs-dropdown-link-color: #{$fg};
+  --bs-dropdown-link-hover-color: #{$fg};
+  --bs-dropdown-link-hover-bg: #{$hover-bg};
+}
+
+.bg-info, .bg-warning {
+  color: $active-bg !important;
+}
+
+#verge-api-link {
+  background: linear-gradient(135deg, #a82171, #7235ba);
+  border: 1px solid #ff86c8;
+  color: #fff;
+  box-shadow: 0 0 22px rgba(255, 91, 179, 0.3);
+}
+
+#verge-api-link:hover, #verge-api-link:focus-visible {
+  background: linear-gradient(135deg, #bd2d89, #8746ce);
+  color: #fff;
+}

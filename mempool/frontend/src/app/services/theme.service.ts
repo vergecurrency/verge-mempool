@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
-import { defaultMempoolFeeColors, contrastMempoolFeeColors, lightMempoolFeeColors } from '@app/app.constants';
+import { defaultMempoolFeeColors, contrastMempoolFeeColors, lightMempoolFeeColors, retrowaveMempoolFeeColors } from '@app/app.constants';
 import { StorageService } from '@app/services/storage.service';
 import { StateService } from '@app/services/state.service';
 
@@ -20,7 +20,7 @@ export class ThemeService {
   ) {
     let theme = this.stateService.env.customize?.theme || this.storageService.getValue('theme-preference') || 'default';
     // theme preference must be a valid known public theme
-    if (!this.stateService.env.customize?.theme && !['default', 'contrast', 'softsimon', 'nymkappa'].includes(theme)) {
+    if (!this.stateService.env.customize?.theme && !['default', 'contrast', 'softsimon', 'nymkappa', 'retrowave'].includes(theme)) {
       theme = 'default';
       this.storageService.setValue('theme-preference', 'default');
     }
@@ -127,6 +127,8 @@ export class ThemeService {
         return contrastMempoolFeeColors;
       case 'nymkappa':
         return lightMempoolFeeColors;
+      case 'retrowave':
+        return retrowaveMempoolFeeColors;
       default:
         return defaultMempoolFeeColors;
     }

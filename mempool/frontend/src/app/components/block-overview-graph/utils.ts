@@ -1,4 +1,4 @@
-import { feeLevels, defaultMempoolFeeColors, contrastMempoolFeeColors } from '@app/app.constants';
+import { feeLevels, defaultMempoolFeeColors, contrastMempoolFeeColors, retrowaveMempoolFeeColors } from '@app/app.constants';
 import { Color } from '@components/block-overview-graph/sprite-types';
 import TxView from '@components/block-overview-graph/tx-view';
 
@@ -120,6 +120,37 @@ export const contrastAuditColors = {
   added_prioritized: darken(desaturate(hexToColor('00bb98'), 0.15), 0.85),
   prioritized: darken(desaturate(hexToColor('00bb98'), 0.3), 0.7),
   accelerated: hexToColor('8f5ff6'),
+};
+
+const retrowaveColors: { [key: string]: ColorPalette } = {
+  fee: {
+    base: retrowaveMempoolFeeColors.map(hexToColor),
+    audit: [],
+    marginal: [],
+    baseLevel: (tx: TxView, rate: number) => feeLevels.findIndex((feeLvl) => Math.max(0, rate) < feeLvl) - 1
+  },
+};
+for (const key in retrowaveColors) {
+  const base = retrowaveColors[key].base;
+  retrowaveColors[key].audit = base.map((color) => darken(desaturate(color, 0.3), 0.9));
+  retrowaveColors[key].marginal = base.map((color) => darken(desaturate(color, 0.8), 1.1));
+  retrowaveColors['unmatched' + key] = {
+    base: base.map(c => setOpacity(c, 0.2)),
+    audit: retrowaveColors[key].audit.map(c => setOpacity(c, 0.2)),
+    marginal: retrowaveColors[key].marginal.map(c => setOpacity(c, 0.2)),
+    baseLevel: retrowaveColors[key].baseLevel,
+  };
+}
+
+export { retrowaveColors };
+
+export const retrowaveAuditColors = {
+  censored: hexToColor('ff86c8'),
+  missing: hexToColor('b55d98'),
+  added: hexToColor('39def3'),
+  added_prioritized: hexToColor('2aacc3'),
+  prioritized: hexToColor('718af8'),
+  accelerated: hexToColor('ffbc72'),
 };
 
 export function defaultColorFunction(

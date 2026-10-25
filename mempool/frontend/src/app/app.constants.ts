@@ -82,6 +82,19 @@ export const contrastMempoolFeeColors = [
   'ffb700',
  ];
 
+// Low-to-high fee colors for the Retrowave theme: cyan, violet, pink, then sunset amber.
+const retrowaveStops = ['39def3', '718af8', 'b76ae8', 'f16ab2', 'ff918f', 'ffbc72'];
+export const retrowaveMempoolFeeColors = defaultMempoolFeeColors.map((_, index, colors) => {
+  const position = index * (retrowaveStops.length - 1) / (colors.length - 1);
+  const first = Math.floor(position);
+  const second = Math.min(first + 1, retrowaveStops.length - 1);
+  const blend = position - first;
+  return [0, 2, 4].map(offset => Math.round(
+    parseInt(retrowaveStops[first].slice(offset, offset + 2), 16) * (1 - blend) +
+    parseInt(retrowaveStops[second].slice(offset, offset + 2), 16) * blend
+  ).toString(16).padStart(2, '0')).join('');
+});
+
  export const lightMempoolFeeColors = [
   '49c284',
   '99c246',
