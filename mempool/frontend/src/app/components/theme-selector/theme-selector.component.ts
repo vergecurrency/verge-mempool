@@ -22,7 +22,7 @@ export class ThemeSelectorComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.themeForm = this.formBuilder.group({
-      theme: ['default']
+      theme: [this.themeService.theme]
     });
     this.themeStateSubscription = this.themeService.themeState$.subscribe(({ theme, loading }) => {
       this.themeForm.get('theme')?.setValue(theme, { emitEvent: false });

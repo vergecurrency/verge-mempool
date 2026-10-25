@@ -18,24 +18,25 @@ export class ThemeService {
     private storageService: StorageService,
     private stateService: StateService,
   ) {
-    let theme = this.stateService.env.customize?.theme || this.storageService.getValue('theme-preference') || 'default';
+    const defaultTheme = this.stateService.isVerge ? 'retrowave' : 'default';
+    let theme = this.stateService.env.customize?.theme || this.storageService.getValue('theme-preference') || defaultTheme;
     // theme preference must be a valid known public theme
     if (!this.stateService.env.customize?.theme && !['default', 'contrast', 'softsimon', 'nymkappa', 'retrowave'].includes(theme)) {
-      theme = 'default';
-      this.storageService.setValue('theme-preference', 'default');
+      theme = defaultTheme;
+      this.storageService.setValue('theme-preference', defaultTheme);
     }
     if (!this.stateService.env.customize?.theme) {
       const aprilThemeState = this.storageService.getValue('april-theme');
       if (this.isAprilFirst()) {
         if (aprilThemeState !== 'dismissed') {
           if (aprilThemeState !== 'active') {
-            this.storageService.setValue('april-theme-backup', this.storageService.getValue('theme-preference') || 'default');
+            this.storageService.setValue('april-theme-backup', this.storageService.getValue('theme-preference') || defaultTheme);
             this.storageService.setValue('april-theme', 'active');
           }
           theme = 'nymkappa';
         }
       } else if (aprilThemeState === 'active') {
-        theme = this.storageService.getValue('april-theme-backup') || 'default';
+        theme = this.storageService.getValue('april-theme-backup') || defaultTheme;
         this.storageService.setValue('theme-preference', theme);
         this.clearAprilTheme();
       } else if (aprilThemeState === 'dismissed') {

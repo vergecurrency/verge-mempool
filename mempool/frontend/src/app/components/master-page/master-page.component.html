@@ -24,7 +24,7 @@
         }
       }
       @if (stateService.isVerge) {
-        <img src="/resources/verge/verge.svg" alt="" width="30" height="30" class="me-2"><span class="fw-bold" style="font-size: 1.4rem; color: var(--title-fg)">Verge Explorer</span>
+        <img src="/resources/verge/navbar-logo.png" alt="" width="30" height="30" class="me-2"><span class="fw-bold" style="font-size: 1.4rem; color: var(--title-fg)">Verge Explorer</span>
       } @else if (!enterpriseInfo || enterpriseInfo.dualLogo) {
         <app-svg-images *ngIf="!officialMempoolSpace" name="mempoolSpace" viewBox="0 0 500 126" class="mempool-logo" [ngStyle]="{'opacity': connectionState.val === 2 ? 1 : 0.5 }"></app-svg-images>
         <app-svg-images *ngIf="officialMempoolSpace" name="officialMempoolSpace" viewBox="0 0 500 126"></app-svg-images>
@@ -47,7 +47,7 @@
         }
       }
       @if (stateService.isVerge) {
-        <img src="/resources/verge/verge.svg" alt="" width="26" height="26" class="me-2"><span class="fw-bold" style="font-size: 1.15rem; color: var(--title-fg)">Verge Explorer</span>
+        <img src="/resources/verge/navbar-logo.png" alt="" width="26" height="26" class="me-2"><span class="fw-bold" style="font-size: 1.15rem; color: var(--title-fg)">Verge Explorer</span>
       } @else if (!enterpriseInfo || enterpriseInfo.dualLogo) {
         <app-svg-images *ngIf="!officialMempoolSpace" name="mempoolSpace" viewBox="0 0 500 126" class="mempool-logo" [ngStyle]="{'opacity': connectionState.val === 2 ? 1 : 0.5 }"></app-svg-images>
         <app-svg-images *ngIf="officialMempoolSpace" name="officialMempoolSpace" viewBox="0 0 500 126"></app-svg-images>
