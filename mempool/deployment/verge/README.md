@@ -90,8 +90,9 @@ The Nginx example binds only `127.0.0.1:8080` for staging. It serves the actual
 frontend, splits `/api/v1` to Mempool and `/api` to Rust, supports WebSocket
 upgrades, returns real 404s for missing static files, and withholds internal
 backend routes and public transaction submission. Run `nginx -t` before use.
-Configure the actual TLS virtual host/domain only after staging passes. Publish
-the matching `sources.tar.gz` at `SOURCE_CODE_URL`; retain the upstream AGPL,
+Configure the actual TLS virtual host/domain only after staging passes. Point
+`SOURCE_CODE_URL` to the public repository and publish the matching
+`sources.tar.gz` as a separate corresponding-source download; retain the upstream AGPL,
 MIT, BSD and asset notices. Dependency inventories assist the final license
 review; they are not an automatic license-clearance report.
 

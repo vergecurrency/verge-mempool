@@ -19,6 +19,6 @@
   "STRATUM_ENABLED": false,
   "AUDIT": false,
   "MEMPOOL_WEBSITE_URL": "https://explorer.example.invalid",
-  "SOURCE_CODE_URL": "https://explorer.example.invalid/source/sources.tar.gz",
+  "SOURCE_CODE_URL": "https://github.com/vergecurrency/verge-mempool",
   "SERVICES_API": ""
 }
