@@ -89,7 +89,7 @@ test('Verge network and algorithm identifiers follow the Core source mapping', (
   assert.equal(vergeProfile('mainnet').pubkeyHash, 0x1e);
   assert.equal(vergeProfile('testnet').scriptHash, 0xc6);
   assert.throws(() => vergeProfile('signet'), /Unsupported/);
-  assert.deepEqual([0x0800, 0x1800, 0x5000, 0x2000, 0x1000].map(vergeAlgorithm), ['scrypt', 'x17', 'lyra2re', 'blake', 'groestl']);
+  assert.deepEqual([0x0800, 0x1800, 0x5000, 0x2000, 0x1000].map(vergeAlgorithm), ['scrypt', 'x17', 'lyra2rev2', 'blake2s', 'myriad-groestl']);
 });
 
 for (const fixture of fixtures.blocks) {
@@ -127,7 +127,9 @@ for (const fixture of mainnet.blocks) {
     const referencedId = Buffer.from(fixture.child_header, 'hex').subarray(4, 36).reverse().toString('hex');
     assert.equal(decoded.id, referencedId);
     assert.equal(decoded.id, fixture.hash);
-    assert.equal(decoded.algo, fixture.algorithm);
+    const preciseNames: Record<string, string> = { lyra2re: 'lyra2rev2', blake: 'blake2s', groestl: 'myriad-groestl' };
+    const preciseName = preciseNames[fixture.algorithm] ?? fixture.algorithm;
+    assert.equal(decoded.algo, preciseName);
     assert.equal(decoded.size * 2, fixture.raw.length);
     assert.ok(decoded.signature.length > 0);
   });
@@ -250,7 +252,7 @@ test('Electrum unconfirmed parent heights and zero-fee transactions paginate wit
   assert.throws(() => electrumCursorStart(history, 'missing'), /cursor/);
 });
 
-test('mining statistics keep five independent difficulties/rates and normalize the BLAKE RPC alias', async () => {
+test('mining statistics use precise names while reading Core legacy rate keys', async () => {
   const versions = [0x1000, 0x2000, 0x5000, 0x1800, 0x0800];
   const rpc = {
     getBlockCount: async () => 4,
@@ -260,8 +262,11 @@ test('mining statistics keep five independent difficulties/rates and normalize t
   };
   const result = await getVergeMiningStatistics(rpc, 5);
   assert.equal(result.algorithms.length, 5);
-  assert.equal(result.algorithms.find(a => a.algorithm === 'blake')?.hashrate, 4);
-  assert.equal(result.algorithms.find(a => a.algorithm === 'groestl')?.difficulty, 100);
+  assert.deepEqual(result.algorithms.map(a => a.algorithm), ['scrypt', 'x17', 'lyra2rev2', 'blake2s', 'myriad-groestl']);
+  assert.equal(result.algorithms.find(a => a.algorithm === 'lyra2rev2')?.hashrate, 3);
+  assert.equal(result.algorithms.find(a => a.algorithm === 'blake2s')?.hashrate, 4);
+  assert.equal(result.algorithms.find(a => a.algorithm === 'myriad-groestl')?.hashrate, 5);
+  assert.equal(result.algorithms.find(a => a.algorithm === 'myriad-groestl')?.difficulty, 100);
   assert.equal(result.algorithms.find(a => a.algorithm === 'scrypt')?.lastBlockHeight, 4);
   assert.equal('totalHashrate' in result, false);
   assert.equal((await getVergeMiningStatistics(rpc, 1)).algorithms.find(a => a.algorithm === 'x17')?.difficulty, null);

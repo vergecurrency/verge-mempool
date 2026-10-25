@@ -1,6 +1,10 @@
 import { VergeAlgorithm, isProofOfStake, vergeAlgorithm } from './chain-profile';
 
-const algorithms: VergeAlgorithm[] = ['scrypt', 'x17', 'lyra2re', 'blake', 'groestl'];
+const algorithms: VergeAlgorithm[] = ['scrypt', 'x17', 'lyra2rev2', 'blake2s', 'myriad-groestl'];
+// Core's getallnetworkhashps retains legacy names for these two algorithms.
+const coreRateKeys: Record<VergeAlgorithm, string> = {
+  scrypt: 'scrypt', x17: 'x17', lyra2rev2: 'lyra2re', blake2s: 'blake2s', 'myriad-groestl': 'groestl',
+};
 
 export interface VergeMiningRpc {
   getBlockCount(): Promise<number>;
@@ -30,7 +34,7 @@ export async function getVergeMiningStatistics(client: VergeMiningRpc, lookback 
     hashrate: null, blocksInSample: 0,
   }])) as Record<VergeAlgorithm, AlgorithmStatistics>;
   for (const algorithm of algorithms) {
-    const rate = rates[algorithm === 'blake' ? 'blake2s' : algorithm];
+    const rate = rates[coreRateKeys[algorithm]];
     if (typeof rate === 'number' && Number.isFinite(rate) && rate >= 0) { stats[algorithm].hashrate = rate; }
   }
   const lower = Math.max(0, height - lookback + 1);

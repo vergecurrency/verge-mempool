@@ -2,7 +2,7 @@
 // Distributed under the GNU Affero General Public License; see COPYING.md.
 
 export type VergeNetwork = 'mainnet' | 'testnet' | 'regtest';
-export type VergeAlgorithm = 'scrypt' | 'x17' | 'lyra2re' | 'blake' | 'groestl';
+export type VergeAlgorithm = 'scrypt' | 'x17' | 'lyra2rev2' | 'blake2s' | 'myriad-groestl';
 
 export interface VergeChainProfile {
   chain: 'verge';
@@ -47,9 +47,9 @@ export function vergeProfile(network: string): VergeChainProfile {
 export function vergeAlgorithm(version: number): VergeAlgorithm {
   switch (version & 0x7800) {
     case 0x1800: return 'x17';
-    case 0x5000: return 'lyra2re';
-    case 0x2000: return 'blake';
-    case 0x1000: return 'groestl';
+    case 0x5000: return 'lyra2rev2';
+    case 0x2000: return 'blake2s';
+    case 0x1000: return 'myriad-groestl';
     default: return 'scrypt';
   }
 }

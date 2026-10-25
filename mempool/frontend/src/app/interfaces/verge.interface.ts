@@ -8,7 +8,7 @@ export interface VergeMiningStatistics {
   hashrateUnit: 'H/s';
   hashrateSource: string;
   algorithms: {
-    algorithm: 'scrypt' | 'x17' | 'lyra2re' | 'blake' | 'groestl';
+    algorithm: 'scrypt' | 'x17' | 'lyra2rev2' | 'blake2s' | 'myriad-groestl';
     difficulty: number | null;
     lastBlockHeight: number | null;
     hashrate: number | null;
