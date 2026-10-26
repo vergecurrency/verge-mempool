@@ -47,11 +47,11 @@
               *ngIf="(!stateService.isVerge || block?.extras?.feeStatsAvailable !== false) && block?.extras?.minFee != null && block?.extras?.maxFee != null; else emptyfeespan">
               <app-fee-rate [fee]="block?.extras?.minFee" [showUnit]="false" unitClass=""></app-fee-rate>
               -
-              <app-fee-rate [fee]="block?.extras?.maxFee" unitClass=""></app-fee-rate>
+              <app-fee-rate [fee]="block?.extras?.maxFee" [showUnit]="!stateService.isVerge" unitClass=""></app-fee-rate>
             </div>
             <ng-template #emptyfeespan>
               <div [attr.data-cy]="'bitcoin-block-offset=' + offset + '-index-' + i + '-fees'" class="fee-span">
-                <app-fee-rate unitClass=""></app-fee-rate>
+                <app-fee-rate [showUnit]="!stateService.isVerge" unitClass=""></app-fee-rate>
               </div>
             </ng-template>
             <div [attr.data-cy]="'bitcoin-block-' + offset + '-index-' + i + '-total-fees'" *ngIf="blockDisplayMode === 'fees'; else noMiningInfo"
