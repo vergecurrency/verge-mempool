@@ -160,16 +160,21 @@ function blockExtension(reader: Reader) {
   const version = objectVersion(reader);
   const proof = stakeProof(reader);
   const authorization = blockAuthorization(reader);
+  const signatureEnd = reader.offset - start;
   const votes = boundedVector(reader, 1024, checkpointVote);
   const blockEvidence = boundedVector(reader, 16, r => ({ version: objectVersion(r), first: blockAuthorization(r), second: blockAuthorization(r) }));
   const voteEvidence = boundedVector(reader, 16 - blockEvidence.length, r => ({ version: objectVersion(r), first: checkpointVote(r), second: checkpointVote(r) }));
   const raw = reader.bytes.subarray(start, reader.offset);
+  // Core excludes only the producer signature from the candidate commitment.
+  // Keep the transmitted bytes intact; signature verification belongs to Core.
+  const committed = Buffer.from(raw);
+  committed.fill(0, signatureEnd - 64, signatureEnd);
   if (authorization.slot !== proof.slot || authorization.stakeProofHash !== proof.hash ||
       authorization.bondOutpoint.txid !== proof.bondOutpoint.txid || authorization.bondOutpoint.vout !== proof.bondOutpoint.vout) {
     throw new Error('Inconsistent Verge PoS authorization');
   }
   return { version, stakeProof: proof, authorization, votes, blockEvidence, voteEvidence,
-    hash: taggedHash('VergePoS/Data/v1', raw), hex: raw.toString('hex') };
+    hash: taggedHash('VergePoS/Data/v1', committed), hex: raw.toString('hex') };
 }
 
 function readBlock(hex: string, powOnly: boolean) {

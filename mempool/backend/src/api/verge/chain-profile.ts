@@ -26,7 +26,7 @@ const networks = {
   },
   testnet: {
     rpcChain: 'test', genesis: '000005e0bb94e3a30a565d1a14ad95a189d47ca45c5bbbe48ee7a32eab8cb980',
-    rpcPort: 20104, magic: 'd6932f8a', pubkeyHash: 115, scriptHash: 198, posActivationHeight: 3000,
+    rpcPort: 20104, magic: '69c1da8e', pubkeyHash: 115, scriptHash: 198, posActivationHeight: 3000,
   },
   regtest: {
     rpcChain: 'regtest', genesis: '65b4e101cacf3e1e4f3a9237e3a74ffd1186e595d8b78fa8ea22c21ef5bf9347',

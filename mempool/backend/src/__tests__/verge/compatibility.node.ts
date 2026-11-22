@@ -184,11 +184,25 @@ for (const fixture of regtest.blocks) {
       assert.equal(decoded.posExtension!.stakeProof.slot, BigInt(Math.floor(decoded.timestamp / 30)));
       assert.equal(decoded.posExtension!.votes.length, fixture.block.height === 1500 ? 0 : 1);
       assert.ok(decoded.tx.every(tx => tx.version === POS_TRANSACTION_VERSION));
-      // The signature itself is part of the header commitment, even though Core validates it cryptographically.
+      // Producer signatures do not change candidate IDs; Core still validates them.
       const changed = Buffer.from(fixture.raw, 'hex');
       const extensionOffset = changed.length - decoded.posExtension!.hex.length / 2;
       changed[extensionOffset + 1 + 295 + 273 - 1] ^= 1;
-      assert.throws(() => decodeVergeBlock(changed.toString('hex')), /commitment/);
+      const resigned = decodeVergeBlock(changed.toString('hex'));
+      assert.equal(resigned.id, decoded.id);
+      assert.equal(resigned.posExtension!.hash, decoded.posExtension!.hash);
+      assert.notEqual(resigned.posExtension!.authorization.signature, decoded.posExtension!.authorization.signature);
+      assert.equal(resigned.posExtension!.hex, changed.subarray(extensionOffset).toString('hex'));
+      const tag = createHash('sha256').update('VergePoS/Data/v1').digest();
+      const oldCommitment = createHash('sha256').update(tag).update(tag).update(Buffer.from(fixture.raw, 'hex').subarray(extensionOffset)).digest();
+      const oldFormat = Buffer.from(fixture.raw, 'hex');
+      oldCommitment.copy(oldFormat, 80);
+      assert.throws(() => decodeVergeBlock(oldFormat.toString('hex')), /commitment/);
+      if (decoded.posExtension!.votes.length) {
+        const changedVote = Buffer.from(fixture.raw, 'hex');
+        changedVote[extensionOffset + 1 + 295 + 273 + 1 + 229 - 1] ^= 1;
+        assert.throws(() => decodeVergeBlock(changedVote.toString('hex')), /commitment/);
+      }
       changed[extensionOffset] = 2;
       assert.throws(() => decodeVergeBlock(changed.toString('hex')), /object version/);
       const excessiveVotes = Buffer.from(fixture.raw, 'hex');
@@ -383,7 +397,7 @@ test('real PoS ordinary spend preserves replay version, transaction time, merkle
   assert.equal(block.tx[1].vin[0].is_coinbase, false);
   assert.equal(block.tx[1].vin[0].sequence, 0xfffffffd);
   assert.equal(block.tx[1].time, fixture.block.tx[1].time);
-  assert.equal(block.tx[0].vout.reduce((sum, output) => sum + output.value, 0n), 200000n);
+  assert.equal(block.tx[0].vout.reduce((sum, output) => sum + output.value, 0n), BigInt(fixture.fee_atomic));
   verifyElectrumMerkle(block.tx[1].txid, { merkle: [block.tx[0].txid], pos: 1 }, block.merkle_root);
 });
 

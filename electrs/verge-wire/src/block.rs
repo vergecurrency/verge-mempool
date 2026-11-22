@@ -181,7 +181,11 @@ impl Block {
             let auth = &ext[296..569];
             let mut candidate = bitcoin::consensus::serialize(&header);
             candidate[80..112].fill(0);
-            if Some(tagged(b"VergePoS/Data/v1", &ext)) != header.pos_data_hash
+            // Normalize only the producer signature, retaining the wire bytes
+            // for round trips. Core authenticates the actual signature.
+            let mut committed = ext.clone();
+            committed[1 + 295 + 273 - 64..1 + 295 + 273].fill(0);
+            if Some(tagged(b"VergePoS/Data/v1", &committed)) != header.pos_data_hash
                 || auth[5..37] != header.prev_blockhash.to_byte_array()
                 || auth[37..69] != sha256d::Hash::hash(&candidate).to_byte_array()
                 || auth[69..77] != proof[37..45]

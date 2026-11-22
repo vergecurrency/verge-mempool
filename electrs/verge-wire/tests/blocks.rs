@@ -64,8 +64,8 @@ fn merkle_and_pos_commitment_corruption_are_rejected() {
             corrupt[80] ^= 1;
             assert!(deserialize::<Block>(&corrupt).is_err());
             let mut corrupt = original;
-            let end = corrupt.len();
-            corrupt[end - 4] ^= 1;
+            let offset = corrupt.len() - block.pos_extension.as_ref().unwrap().len();
+            corrupt[offset + 1 + 37] ^= 1;
             assert!(deserialize::<Block>(&corrupt).is_err());
         }
     }
@@ -83,6 +83,39 @@ fn streaming_transaction_decoder_leaves_next_transaction_unread() {
     assert_eq!(Transaction::consensus_decode(&mut cursor).unwrap(), *tx);
     assert_eq!(cursor.position(), bytes.len() as u64);
     assert_eq!(Transaction::consensus_decode(&mut cursor).unwrap(), *tx);
+}
+
+#[test]
+fn only_producer_signature_is_excluded_from_candidate_commitment() {
+    use bitcoin::hashes::{sha256, Hash};
+    for value in fixtures()["blocks"].as_array().unwrap() {
+        let bytes = unhex(value["raw"].as_str().unwrap());
+        let block: Block = deserialize(&bytes).unwrap();
+        let Some(extension) = &block.pos_extension else {
+            continue;
+        };
+        let offset = bytes.len() - extension.len();
+        let mut changed = bytes.clone();
+        changed[offset + 1 + 295 + 273 - 1] ^= 1;
+        let resigned: Block = deserialize(&changed).unwrap();
+        assert_eq!(resigned.block_hash(), block.block_hash());
+        assert_ne!(resigned.pos_extension, block.pos_extension);
+        assert_eq!(serialize(&resigned), changed);
+        // A legacy full-signed-extension commitment is not a fallback format.
+        let tag = sha256::Hash::hash(b"VergePoS/Data/v1").to_byte_array();
+        let mut signed = tag.to_vec();
+        signed.extend(tag);
+        signed.extend(extension);
+        let mut legacy = bytes.clone();
+        legacy[80..112].copy_from_slice(&sha256::Hash::hash(&signed).to_byte_array());
+        assert!(deserialize::<Block>(&legacy).is_err());
+        // Vote signatures remain committed (these fixtures use <253 votes).
+        if extension[569] != 0 {
+            let mut changed_vote = bytes;
+            changed_vote[offset + 569 + 1 + 229 - 1] ^= 1;
+            assert!(deserialize::<Block>(&changed_vote).is_err());
+        }
+    }
 }
 
 #[test]
