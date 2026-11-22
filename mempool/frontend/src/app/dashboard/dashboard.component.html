@@ -20,7 +20,7 @@
           <p *ngIf="vergeFeePolicy$ | async as policy">
             Minimum relay fee: {{ formatVergeAmount(policy.minimumRelayPerChunkAtomic) }} XVG per {{ policy.bytesPerChunk }} bytes.
           </p>
-          <p class="mb-0">Mempool views show observed transactions. Confirmation-time fee estimates are unavailable.</p>
+          <p class="mb-0" *ngIf="vergeCoreVersion$ | async as coreVersion">This server is running Verge Core ({{ coreVersion }}).</p>
         </div></div>
         <app-verge-mining></app-verge-mining>
       </div>

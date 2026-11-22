@@ -125,6 +125,7 @@ export interface IBackendInfo {
   hostname?: string;
   gitCommit: string;
   version: string;
+  coreVersion?: string;
 }
 
 export interface Recommendedfees {

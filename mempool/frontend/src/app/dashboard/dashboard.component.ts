@@ -37,6 +37,7 @@ interface MempoolStatsData {
 })
 export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   vergeFeePolicy$: Observable<any>;
+  vergeCoreVersion$: Observable<string | null>;
   formatVergeAmount = formatVergeAmount;
   network$: Observable<string>;
   mempoolBlocksData$: Observable<MempoolBlocksData>;
@@ -123,6 +124,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.stateService.isVerge) {
       this.vergeFeePolicy$ = this.stateService.blocks$.pipe(startWith(null),
         switchMap(() => this.apiService.getVergeFeePolicy$().pipe(catchError(() => of(null)))), shareReplay(1));
+      this.vergeCoreVersion$ = this.stateService.backendInfo$.pipe(map(info =>
+        /^\/verge:([0-9]+(?:\.[0-9]+){1,3}(?:[-+][0-9A-Za-z.-]+)?)\/$/i.exec(info.coreVersion ?? '')?.[1] ?? null));
       this.vBytesPerSecondLimit = this.stateService.blockVSize / this.stateService.chain.targetBlockSeconds;
     }
     this.websocketService.want(['blocks', 'stats', 'mempool-blocks', 'live-2h-chart']);

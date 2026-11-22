@@ -33,13 +33,14 @@ class BackendInfo {
       osVersion: `${os.type()} ${os.release()}`,
     };
 
+    const coreVersionRefreshMs = config.MEMPOOL.CHAIN === 'verge' ? 60 * 60 * 1000 : 10 * 60 * 1000;
     this.timer = setInterval(async () => {
       try {
         await this.$updateCoreVersion();
       } catch (e) {
         logger.err(`Exception in $updateCoreVersion. Reason: ${(e instanceof Error ? e.message : e)}`);
       }
-    }, 10 * 60 * 1000); // every 10 minutes
+    }, coreVersionRefreshMs);
     void this.$updateCoreVersion(); // starting immediately
   }
 
