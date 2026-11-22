@@ -44,6 +44,7 @@ import FlagValueRepository, { DataPerFlag, INDEXING_PRESETS } from '../repositor
 import { isVerge, rpcCoinToAtomic } from './verge/runtime';
 import { safeAtomicNumber } from './verge/amounts';
 import { reconcileVergeBlockCache } from './verge/block-cache';
+import { vergePoolFromCoinbase } from './verge/pool-tags';
 import { getVergeBlockStats } from './verge/block-stats';
 
 class Blocks {
@@ -70,6 +71,15 @@ class Blocks {
   }
 
   public setBlocks(blocks: BlockExtended[]) {
+    if (isVerge) {
+      for (const block of blocks) {
+        const pool = vergePoolFromCoinbase(block.extras?.coinbaseRaw);
+        if (pool && block.extras?.pool?.slug === 'unknown') {
+          block.extras.pool.name = pool.name;
+          block.extras.pool.slug = pool.slug;
+        }
+      }
+    }
     this.blocks = blocks;
   }
 
@@ -486,7 +496,10 @@ class Blocks {
    * @asyncUnsafe
    */
   private async $findBlockMiner(txMinerInfo: TransactionMinerInfo | undefined): Promise<PoolTag> {
-    if (isVerge) { return { ...poolsParser.unknownPool, link: '' }; }
+    if (isVerge) {
+      const pool = vergePoolFromCoinbase(txMinerInfo?.vin?.[0]?.scriptsig);
+      return { ...poolsParser.unknownPool, link: '', ...pool };
+    }
     if (txMinerInfo === undefined || txMinerInfo.vout.length < 1) {
       if (config.DATABASE.ENABLED === true) {
         return await poolsRepository.$getUnknownPool();
