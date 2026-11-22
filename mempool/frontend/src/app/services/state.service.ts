@@ -49,6 +49,8 @@ export type SignaturesMode = 'all' | 'interesting' | 'none' | null;
 export interface Env {
   CHAIN?: 'bitcoin' | 'verge';
   SOURCE_CODE_URL?: string;
+  VERGE_MAINNET_WEBSITE_URL?: string;
+  VERGE_TESTNET_WEBSITE_URL?: string;
   MAINNET_ENABLED: boolean;
   TESTNET_ENABLED: boolean;
   TESTNET4_ENABLED: boolean;

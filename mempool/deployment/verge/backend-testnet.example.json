@@ -1,0 +1,19 @@
+{
+  "MEMPOOL": {
+    "CHAIN": "verge", "NETWORK": "testnet", "BACKEND": "electrum",
+    "HTTP_HOST": "127.0.0.1", "HTTP_PORT": 9009, "POLL_RATE_MS": 1000,
+    "CACHE_DIR": "/var/lib/verge-explorer-testnet/backend", "CACHE_ENABLED": false,
+    "INDEXING_BLOCKS_AMOUNT": 0, "RUST_GBT": false, "AUDIT": false, "CLUSTER_MEMPOOL": false
+  },
+  "CORE_RPC": { "HOST": "127.0.0.1", "PORT": 20104, "COOKIE": true, "COOKIE_PATH": "/var/lib/verge/testnet3/.cookie" },
+  "ELECTRUM": { "HOST": "127.0.0.1", "PORT": 60011, "TLS_ENABLED": false, "MAX_BEHIND_TIP": 2 },
+  "ESPLORA": { "REST_API_URL": "http://127.0.0.1:3011" },
+  "DATABASE": { "ENABLED": false, "DATABASE": "verge_testnet" },
+  "FIAT_PRICE": { "ENABLED": false },
+  "LIGHTNING": { "ENABLED": false },
+  "STRATUM": { "ENABLED": false },
+  "STATISTICS": { "ENABLED": false },
+  "SYSLOG": { "ENABLED": false },
+  "MEMPOOL_SERVICES": { "ACCELERATIONS": false },
+  "WALLETS": { "ENABLED": false }
+}

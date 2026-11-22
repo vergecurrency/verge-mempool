@@ -1,0 +1,27 @@
+[Unit]
+Description=Verge testnet explorer backend
+After=network-online.target verge-testnet-indexer.service
+Wants=verge-testnet-indexer.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=verge-explorer
+Group=verge-explorer
+WorkingDirectory=/opt/verge-explorer-testnet/current/backend
+Environment=MEMPOOL_CONFIG_FILE=/etc/verge-explorer-testnet/backend.json
+Environment=VERGE_PEERS_STORE_PATH=/var/lib/verge-explorer-testnet/peers-testnet.json
+ExecStart=/usr/bin/node --max-old-space-size=2048 /opt/verge-explorer-testnet/current/backend/dist/index.js
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+LimitNOFILE=65536
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/verge-explorer-testnet
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

@@ -98,6 +98,8 @@ export class MasterPageComponent implements OnInit, OnDestroy {
       this.env.LIQUID_ENABLED,
       this.env.LIQUID_TESTNET_ENABLED,
       this.env.MAINNET_ENABLED,
+      this.stateService.isVerge && !!this.env.VERGE_MAINNET_WEBSITE_URL,
+      this.stateService.isVerge && !!this.env.VERGE_TESTNET_WEBSITE_URL,
     ];
     const enabledNetworksCount = networks.filter((networkEnabled) => networkEnabled).length;
     this.isDropdownVisible = enabledNetworksCount > 1;

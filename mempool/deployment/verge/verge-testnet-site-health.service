@@ -1,0 +1,25 @@
+[Unit]
+Description=Show testnet explorer maintenance page while its APIs are unavailable
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=verge-explorer
+Group=verge-explorer
+RuntimeDirectory=verge-explorer-testnet-site-gate
+RuntimeDirectoryMode=0755
+ExecStartPre=/usr/bin/rm -f /run/verge-explorer-testnet-site-gate/ready
+ExecStart=/usr/bin/python3 /opt/verge-explorer-testnet/current/deployment/testnet-health-gate.py
+ExecStopPost=/usr/bin/rm -f /run/verge-explorer-testnet-site-gate/ready
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/verge-explorer-testnet-site-gate
+UMask=0022
+
+[Install]
+WantedBy=multi-user.target

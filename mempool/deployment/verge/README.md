@@ -24,6 +24,14 @@ HTTPS origin and corresponding-source URL. The example `.invalid` names are
 deliberately rejected. For a local Linux qualification run, use the existing
 `frontend/mempool-frontend-config.verge.sample.json` testnet profile instead.
 
+For a public Verge testnet explorer, copy `frontend-testnet.example.json` to a
+build profile and replace `testnet-explorer.example.invalid` with its intended
+HTTPS origin. The profile links back to the mainnet explorer; set
+`VERGE_TESTNET_WEBSITE_URL` in the next mainnet frontend build to show a
+matching Testnet link there. These links switch between separate hosts, so a
+testnet request cannot accidentally reach the mainnet API. The example profile
+is deliberately rejected until its public URL is replaced.
+
 ```sh
 bash deployment/verge/build-linux.sh ../electrs /path/frontend.json /var/tmp/verge-build-001 --check-only
 bash deployment/verge/build-linux.sh ../electrs /path/frontend.json /var/tmp/verge-build-001
@@ -97,6 +105,58 @@ Service restarts retry transient Core/index synchronization failures; they do
 not bypass chain/genesis/readiness checks. The Rust database lives separately
 from the release directory. Mainnet, testnet and regtest have distinct database
 namespaces and fingerprints.
+
+## Run a separate testnet explorer
+
+The application, indexer and frontend already recognize the existing Verge
+testnet. The committed profile uses genesis
+`000005e0bb94e3a30a565d1a14ad95a189d47ca45c5bbbe48ee7a32eab8cb980`,
+Core RPC chain `test`, RPC port 20104 and the `testnet3` data subdirectory.
+Confirm these against the actual Core node before building. If the forthcoming
+testnet has a different genesis or network parameters, update the backend
+`verge/chain-profile.ts`, Rust `verge-wire/src/network.rs`, fixtures and gateway
+checks together; do not start this profile against a different chain.
+
+Use a separate host for the public testnet deployment when possible. The
+current mainnet host has limited free memory and swap already in use. The
+testnet example paths and ports are distinct even if both explorers eventually
+share a machine:
+
+| Component | Testnet example |
+| --- | --- |
+| Release pointer | `/opt/verge-explorer-testnet/current` |
+| Persistent index and backend | `/var/lib/verge-explorer-testnet/index`, `/var/lib/verge-explorer-testnet/backend` |
+| Core data and cookie | `/var/lib/verge/testnet3`, `/var/lib/verge/testnet3/.cookie` |
+| Core RPC, indexer REST, Electrum, backend | `20104`, `3011`, `60011`, `9009` |
+| Local gateway | `127.0.0.1:8081` |
+
+Build with `frontend-testnet.example.json` after editing its public URL, and
+install that release under `/opt/verge-explorer-testnet/releases/BUILD_ID`.
+Point only the testnet `current` symlink at it. Copy
+`backend-testnet.example.json` to `/etc/verge-explorer-testnet/backend.json`,
+`verge-testnet-indexer.service`, `verge-testnet-backend.service` and
+`verge-testnet-site-health.service` to the systemd unit directory, and
+`nginx-testnet.conf` into Nginx's `http` context. The health service checks
+both local APIs every three seconds. New page loads show the bundled temporary
+maintenance page whenever either API is unavailable or their tips disagree.
+Create the `verge-explorer` account and testnet state directories first; grant
+read access only to the testnet Core cookie and write access only to the
+testnet explorer state. Adjust `/usr/bin/node`, Core paths and gateway choice
+to the host. Check unit files with `systemd-analyze verify` and the gateway
+with `nginx -t` before starting either service.
+
+Start the testnet indexer after the unpruned testnet Core node has synchronized,
+then start the testnet backend and health service. Check the local gateway
+before configuring its public TLS virtual host:
+
+```sh
+node /opt/verge-explorer-testnet/current/deployment/check-live.cjs \
+  --url=http://127.0.0.1:8081/ --network=testnet
+```
+
+This check rejects wrong genesis, backend/Core/indexer disagreement, lag and
+WebSocket failures. The testnet backend also verifies Core's chain and genesis
+at startup. Keep the mainnet services, release pointer and index untouched.
 
 The Nginx example binds only `127.0.0.1:8080` for staging. It serves the actual
 frontend, splits `/api/v1` to Mempool and `/api` to Rust, supports WebSocket
