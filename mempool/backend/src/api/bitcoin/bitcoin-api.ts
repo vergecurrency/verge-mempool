@@ -10,6 +10,7 @@ import indexer from '../../indexer';
 import { isVerge, rpcCoinToAtomic } from '../verge/runtime';
 import { decodeVergeTransaction } from '../verge/codec';
 import { safeAtomicNumber } from '../verge/amounts';
+import { isProofOfStake } from '../verge/chain-profile';
 
 class BitcoinApi implements AbstractBitcoinApi {
   private rawMempoolCache: IBitcoinApi.RawMempool | null = null;
@@ -24,6 +25,7 @@ class BitcoinApi implements AbstractBitcoinApi {
   }
 
   static convertBlock(block: IBitcoinApi.Block): IEsploraApi.Block {
+    const proof = isVerge ? (isProofOfStake(block.version) ? 'pos' : 'pow') : undefined;
     return {
       id: block.hash,
       height: block.height,
@@ -39,7 +41,7 @@ class BitcoinApi implements AbstractBitcoinApi {
       previousblockhash: block.previousblockhash,
       mediantime: block.mediantime,
       stale: block.confirmations === -1,
-      ...(isVerge ? { algo: block.algo, proof: block.proof, pow_hash: block.pow_hash, signature: block.signature } : {}),
+      ...(isVerge ? { algo: proof === 'pos' ? undefined : block.algo, proof, pow_hash: block.pow_hash, signature: block.signature } : {}),
     };
   }
 
