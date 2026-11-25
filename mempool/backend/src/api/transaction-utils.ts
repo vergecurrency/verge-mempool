@@ -470,6 +470,8 @@ class TransactionUtils {
     const map = {
       'pubkey': 'p2pk',
       'pubkeyhash': 'p2pkh',
+      'pq_keyhash': 'pq_keyhash',
+      'pq_multisig': 'pq_multisig',
       'scripthash': 'p2sh',
       'witness_v0_keyhash': 'v0_p2wpkh',
       'witness_v0_scripthash': 'v0_p2wsh',

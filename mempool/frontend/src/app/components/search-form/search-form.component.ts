@@ -76,7 +76,7 @@ export class SearchFormComponent implements OnInit {
       this.regexAddress = getRegex('address', network as any || 'mainnet');
       this.regexBlockhash = getRegex('blockhash', network as any || 'mainnet');
       if (this.stateService.isVerge) {
-        this.regexAddress = /^(?:[a-km-zA-HJ-NP-Z1-9]{26,35}|(?:02|03)[a-fA-F0-9]{64}|04[a-fA-F0-9]{128})$/;
+        this.regexAddress = /^(?:[a-km-zA-HJ-NP-Z1-9]{26,35}|(?:02|03)[a-fA-F0-9]{64}|04[a-fA-F0-9]{128}|(?:xvgpq|xvgtpq|xvgrpq)1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58,59}|(?:XVGPQ|XVGTPQ|XVGRPQ)1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58,59})$/;
         // PoS and the five PoW algorithms have no common leading-zero pattern.
         this.regexBlockhash = /^(?!)$/;
       }

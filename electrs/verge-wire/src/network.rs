@@ -37,7 +37,7 @@ impl Network {
             },
             Self::Testnet => Parameters {
                 genesis: "000005e0bb94e3a30a565d1a14ad95a189d47ca45c5bbbe48ee7a32eab8cb980",
-                magic: [0x69, 0xc1, 0xda, 0x8e],
+                magic: [0x52, 0x4c, 0x7f, 0x07],
                 rpc_port: 20104,
                 p2p_port: 21104,
                 p2pkh_prefix: 115,

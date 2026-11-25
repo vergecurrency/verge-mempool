@@ -15,6 +15,22 @@ function loadShared(name) {
 const { canonicalBlockWindow, matchesBlockExtension, snapshotChangesBranch, chainDisplay, formatVergeAmount, assertSafeVergeAmounts, vergeAddressType, assertVergeChainIdentity } = loadShared('chain-profile');
 const { AddressStats } = loadShared('address-stats');
 const { sortVergePeers, paginateVergePeers } = loadShared('verge-peers');
+const pqFixtures = require('../../../electrs/verge-wire/tests/fixtures/pq-blocks.json');
+
+test('native PQ address display accepts Core single-key/multisig addresses without SegWit assumptions', () => {
+  for (const item of pqFixtures.addresses) {
+    assert.equal(vergeAddressType(item.address, 'regtest'), item.type);
+    assert.equal(vergeAddressType(item.address.toUpperCase(), 'regtest'), item.type);
+    assert.equal(vergeAddressType(item.address, 'testnet'), 'unknown');
+    assert.equal(vergeAddressType(item.address, 'mainnet'), 'unknown');
+    assert.equal(vergeAddressType('X' + item.address.slice(1), 'regtest'), 'unknown');
+    assert.equal(vergeAddressType(item.address.slice(0, -2), 'regtest'), 'unknown');
+    for (const [network, prefix] of [['mainnet', 'xvgpq'], ['testnet', 'xvgtpq']]) {
+      // Shape-only classification; checksum validation remains in the indexer.
+      assert.equal(vergeAddressType(item.address.replace('xvgrpq', prefix), network), item.type);
+    }
+  }
+});
 
 test('peer pages contain at most twenty sorted entries and clamp when the list changes', () => {
   const peers = Array.from({ length: 46 }, (_, index) => ({ address: `peer-${index + 1}` }));

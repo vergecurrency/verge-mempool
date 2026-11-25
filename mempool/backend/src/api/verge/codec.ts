@@ -14,6 +14,7 @@ export function doubleSha256(bytes: Buffer): Buffer {
 
 class Reader {
   public offset = 0;
+  public signatures: [number, number][] = [];
   constructor(public readonly bytes: Buffer) {}
   take(length: number): Buffer {
     if (!Number.isSafeInteger(length) || length < 0 || this.offset + length > this.bytes.length) {
@@ -114,37 +115,53 @@ function taggedHash(tag: string, bytes: Buffer): string {
   return createHash('sha256').update(prefix).update(prefix).update(bytes).digest().reverse().toString('hex');
 }
 
-function objectVersion(reader: Reader): number {
+function objectVersion(reader: Reader, expected?: number): number {
   const version = reader.take(1)[0];
-  if (version !== 1) { throw new Error('Unsupported Verge PoS object version'); }
+  if ((version !== 1 && version !== 2) || (expected !== undefined && version !== expected)) { throw new Error('Unsupported Verge PoS object version'); }
   return version;
+}
+
+function authenticationSignature(reader: Reader, size: number): string {
+  const start = reader.offset;
+  const signature = reader.take(size).toString('hex');
+  reader.signatures.push([start, reader.offset]);
+  return signature;
 }
 
 function outpoint(reader: Reader) { return { txid: reader.hash(), vout: reader.u32() }; }
 
-function stakeProof(reader: Reader) {
+function stakeProof(reader: Reader, expected: number) {
   const start = reader.offset;
   const result = {
-    version: objectVersion(reader), bondOutpoint: outpoint(reader), slot: reader.u64(), snapshotEpoch: reader.u64(),
+    version: objectVersion(reader, expected), bondOutpoint: outpoint(reader), slot: reader.u64(), snapshotEpoch: reader.u64(),
     snapshotRoot: reader.hash(), epochSeed: reader.hash(), vrfPublicKey: reader.take(33).toString('hex'),
     vrfOutput: reader.take(32).toString('hex'), vrfProof: reader.take(81).toString('hex'), signingPublicKey: reader.take(32).toString('hex'),
   };
+  if (result.version === 2 && (result.vrfPublicKey !== '00'.repeat(33) || result.vrfProof !== '00'.repeat(81))) {
+    throw new Error('Noncanonical public eligibility proof');
+  }
   return { ...result, hash: taggedHash('VergePoS/StakeProof/v1', reader.bytes.subarray(start, reader.offset)) };
 }
 
-function blockAuthorization(reader: Reader) {
+function blockAuthorization(reader: Reader, expected: number) {
+  const version = objectVersion(reader, expected);
   return {
-    version: objectVersion(reader), networkId: reader.u32(), parentBlockRoot: reader.hash(), candidateHeaderHash: reader.hash(),
+    version, networkId: reader.u32(), parentBlockRoot: reader.hash(), candidateHeaderHash: reader.hash(),
     slot: reader.u64(), bondOutpoint: outpoint(reader), stakeProofHash: reader.hash(), feeRewardTransactionHash: reader.hash(),
-    parentRandomness: reader.hash(), signature: reader.take(64).toString('hex'),
+    parentRandomness: reader.hash(), signature: authenticationSignature(reader, 64),
+    pqPublicKey: version === 2 ? reader.take(1312).toString('hex') : undefined,
+    pqSignature: version === 2 ? authenticationSignature(reader, 2420) : undefined,
   };
 }
 
-function checkpointVote(reader: Reader) {
+function checkpointVote(reader: Reader, expected: number) {
+  const version = objectVersion(reader, expected);
   return {
-    version: objectVersion(reader), bondOutpoint: outpoint(reader), snapshotEpoch: reader.u64(), sourceEpoch: reader.u64(),
+    version, bondOutpoint: outpoint(reader), snapshotEpoch: reader.u64(), sourceEpoch: reader.u64(),
     sourceCheckpointRoot: reader.hash(), targetEpoch: reader.u64(), targetCheckpointRoot: reader.hash(), headSlot: reader.u64(),
-    headBlockRoot: reader.hash(), signature: reader.take(64).toString('hex'),
+    headBlockRoot: reader.hash(), signature: authenticationSignature(reader, 64),
+    pqPublicKey: version === 2 ? reader.take(1312).toString('hex') : undefined,
+    pqSignature: version === 2 ? authenticationSignature(reader, 2420) : undefined,
   };
 }
 
@@ -157,18 +174,19 @@ function boundedVector<T>(reader: Reader, maximum: number, read: (reader: Reader
 /** Decode the signed extension and check its byte commitment; Core remains the consensus validator. */
 function blockExtension(reader: Reader) {
   const start = reader.offset;
+  const signatureStart = reader.signatures.length;
   const version = objectVersion(reader);
-  const proof = stakeProof(reader);
-  const authorization = blockAuthorization(reader);
-  const signatureEnd = reader.offset - start;
-  const votes = boundedVector(reader, 1024, checkpointVote);
-  const blockEvidence = boundedVector(reader, 16, r => ({ version: objectVersion(r), first: blockAuthorization(r), second: blockAuthorization(r) }));
-  const voteEvidence = boundedVector(reader, 16 - blockEvidence.length, r => ({ version: objectVersion(r), first: checkpointVote(r), second: checkpointVote(r) }));
+  const proof = stakeProof(reader, version);
+  const authorization = blockAuthorization(reader, version);
+  const votes = boundedVector(reader, version === 2 ? 192 : 1024, r => checkpointVote(r, version));
+  const blockEvidence = boundedVector(reader, 16, r => ({ version: objectVersion(r, version), first: blockAuthorization(r, version), second: blockAuthorization(r, version) }));
+  const voteEvidence = boundedVector(reader, 16 - blockEvidence.length, r => ({ version: objectVersion(r, version), first: checkpointVote(r, version), second: checkpointVote(r, version) }));
   const raw = reader.bytes.subarray(start, reader.offset);
-  // Core excludes only the producer signature from the candidate commitment.
-  // Keep the transmitted bytes intact; signature verification belongs to Core.
+  // V1 excludes the producer signature. V2 excludes all classical/PQ signatures
+  // but retains every registered public key. Core verifies authentication.
   const committed = Buffer.from(raw);
-  committed.fill(0, signatureEnd - 64, signatureEnd);
+  const signatures = reader.signatures.slice(signatureStart, version === 1 ? signatureStart + 1 : undefined);
+  for (const [begin, end] of signatures) { committed.fill(0, begin - start, end - start); }
   if (authorization.slot !== proof.slot || authorization.stakeProofHash !== proof.hash ||
       authorization.bondOutpoint.txid !== proof.bondOutpoint.txid || authorization.bondOutpoint.vout !== proof.bondOutpoint.vout) {
     throw new Error('Inconsistent Verge PoS authorization');

@@ -124,6 +124,27 @@ fn tagged(tag: &[u8], bytes: &[u8]) -> [u8; 32] {
     sha256::Hash::hash(&data).to_byte_array()
 }
 
+fn authenticated_record<R: bitcoin::io::Read>(
+    r: &mut Reader<R>,
+    ext: &mut Vec<u8>,
+    signatures: &mut Vec<(usize, usize)>,
+    version: u8,
+    legacy_size: usize,
+) -> Result<(), Error> {
+    let size = legacy_size + if version == 2 { 1312 + 2420 } else { 0 };
+    let record = r.take(size)?;
+    if record[0] != version {
+        return Err(Error::InvalidBlock);
+    }
+    let offset = ext.len();
+    signatures.push((offset + legacy_size - 64, offset + legacy_size));
+    if version == 2 {
+        signatures.push((offset + legacy_size + 1312, offset + size));
+    }
+    ext.extend(record);
+    Ok(())
+}
+
 impl Block {
     pub fn block_hash(&self) -> BlockHash {
         self.header.block_hash()
@@ -149,42 +170,58 @@ impl Block {
             if !signature.is_empty() {
                 return Err(Error::InvalidBlock);
             }
-            let mut ext = r.take(1 + 295 + 273)?;
-            if ext[0] != 1 || ext[1] != 1 || ext[296] != 1 {
+            let version = r.take(1)?[0];
+            if version != 1 && version != 2 {
                 return Err(Error::InvalidBlock);
             }
+            let mut ext = vec![version];
+            let proof = r.take(295)?;
+            if proof[0] != version
+                || (version == 2
+                    && (proof[117..150].iter().any(|b| *b != 0)
+                        || proof[182..263].iter().any(|b| *b != 0)))
+            {
+                return Err(Error::InvalidBlock);
+            }
+            ext.extend(proof);
+            let mut signatures = Vec::new();
+            authenticated_record(r, &mut ext, &mut signatures, version, 273)?;
             let mut evidence_count = 0;
-            for (size, max) in [(229, 1024), (547, 16), (459, 16)] {
+            for (kind, max) in [(0, if version == 2 { 192 } else { 1024 }), (1, 16), (2, 16)] {
                 let count = r.compact()?;
-                if count > max || (size == 459 && count + evidence_count > 16) {
+                if count > max || (kind == 2 && count + evidence_count > 16) {
                     return Err(Error::InvalidBlock);
                 }
-                if size == 547 {
+                if kind == 1 {
                     evidence_count = count;
                 }
                 compact(&mut ext, count);
                 for _ in 0..count {
-                    let record = r.take(size)?;
-                    if record[0] != 1 {
-                        return Err(Error::InvalidBlock);
+                    if kind == 0 {
+                        authenticated_record(r, &mut ext, &mut signatures, version, 229)?;
+                    } else {
+                        if r.take(1)?[0] != version {
+                            return Err(Error::InvalidBlock);
+                        }
+                        ext.push(version);
+                        let size = if kind == 1 { 273 } else { 229 };
+                        authenticated_record(r, &mut ext, &mut signatures, version, size)?;
+                        authenticated_record(r, &mut ext, &mut signatures, version, size)?;
                     }
-                    // Evidence wraps two individually versioned records.
-                    if (size == 547 && (record[1] != 1 || record[274] != 1))
-                        || (size == 459 && (record[1] != 1 || record[230] != 1))
-                    {
-                        return Err(Error::InvalidBlock);
-                    }
-                    ext.extend(record);
                 }
             }
             let proof = &ext[1..296];
-            let auth = &ext[296..569];
+            let auth_size = if version == 2 { 4005 } else { 273 };
+            let auth = &ext[296..296 + auth_size];
             let mut candidate = bitcoin::consensus::serialize(&header);
             candidate[80..112].fill(0);
-            // Normalize only the producer signature, retaining the wire bytes
-            // for round trips. Core authenticates the actual signature.
+            // V1 normalizes only the producer signature; V2 normalizes every
+            // classical/PQ signature, never the registered PQ public keys.
             let mut committed = ext.clone();
-            committed[1 + 295 + 273 - 64..1 + 295 + 273].fill(0);
+            let count = if version == 2 { signatures.len() } else { 1 };
+            for (start, end) in signatures.into_iter().take(count) {
+                committed[start..end].fill(0);
+            }
             if Some(tagged(b"VergePoS/Data/v1", &committed)) != header.pos_data_hash
                 || auth[5..37] != header.prev_blockhash.to_byte_array()
                 || auth[37..69] != sha256d::Hash::hash(&candidate).to_byte_array()

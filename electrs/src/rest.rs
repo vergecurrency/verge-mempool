@@ -473,6 +473,8 @@ impl TxOutValue {
             "unknown"
         };
 
+        #[cfg(feature = "verge")]
+        let script_type = verge_wire::address::pq_type(script).unwrap_or(script_type);
         #[cfg(feature = "liquid")]
         let pegout = PegoutValue::from_txout(txout, config.network_type, config.parent_network);
 

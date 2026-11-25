@@ -11,6 +11,24 @@ import type { PeerCertificate } from 'node:tls';
 
 const fixtures = require('../../__fixtures__/verge/testnet-blocks.json');
 const posFixtures = require('../../__fixtures__/verge/regtest-spends.json');
+const pqFixtures = require('../../../../../electrs/verge-wire/tests/fixtures/pq-blocks.json');
+
+test('Core output conversion preserves native PQ recipients, script types and atomic amounts', () => {
+  const { api } = coreAdapter({});
+  const seen = new Set();
+  for (const tx of pqFixtures.transactions) {
+    const decoded = decodeVergeTransaction(tx.hex);
+    const outputs = api.$convertTransactionOutputs(tx, decoded);
+    tx.vout.forEach((output: any, index: number) => {
+      if (!['pq_keyhash', 'pq_multisig'].includes(output.scriptPubKey.type)) { return; }
+      seen.add(output.scriptPubKey.type);
+      assert.equal(outputs[index].scriptpubkey_type, output.scriptPubKey.type);
+      assert.equal(outputs[index].scriptpubkey_address, output.scriptPubKey.addresses[0]);
+      assert.equal(BigInt(outputs[index].value), decoded.vout[index].value);
+    });
+  }
+  assert.deepEqual([...seen].sort(), ['pq_keyhash', 'pq_multisig']);
+});
 
 function coreAdapter(client: any, verge = true) {
   const spending = new Map();

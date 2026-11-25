@@ -32,7 +32,7 @@ fn networks_have_independent_namespaces_genesis_and_wire_magic() {
         3
     );
     assert_eq!(parameters[0].magic, [0xf7, 0xa7, 0x7e, 0xff]);
-    assert_eq!(parameters[1].magic, [0x69, 0xc1, 0xda, 0x8e]);
+    assert_eq!(parameters[1].magic, [0x52, 0x4c, 0x7f, 0x07]);
     assert_eq!(parameters[2].magic, [0xfa, 0xbf, 0xb5, 0xda]);
     assert_eq!(parameters.map(|p| p.rpc_port), [20102, 20104, 18334]);
     assert_eq!(parameters.map(|p| p.p2p_port), [21102, 21104, 31102]);

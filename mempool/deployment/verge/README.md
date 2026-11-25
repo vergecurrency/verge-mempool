@@ -108,6 +108,24 @@ namespaces and fingerprints.
 
 ## Run a separate testnet explorer
 
+The PQ trial uses testnet message magic `524c7f07` and activates PoS at height
+3000. This explorer decodes both classical (v1) and hybrid ML-DSA (v2) PoS
+extensions, including the v2 signature-normalized block commitment. Verge Core
+remains the cryptographic and consensus validator; the indexer checks the wire
+format, transaction IDs, merkle root and extension commitment.
+
+Native single-key and multisig PQ addresses use Bech32m with `xvgpq1` (mainnet),
+`xvgtpq1` (testnet), or `xvgrpq1` (regtest). These are not SegWit addresses.
+Legacy addresses, PoW blocks and classical PoS blocks remain supported. This
+does not enable PQ consensus on mainnet or change its activation height.
+
+Deploy against an upgraded, unpruned Core with its matching OpenSSL PQ backend.
+For this reset trial, create a fresh **testnet-only** explorer index and Core
+chain directory; old trial data shares the genesis but is not the new chain.
+Do not delete or reuse mainnet data. No database schema migration is introduced
+by this decoder/address update. Paid SMSG funding remains an ordinary indexed
+transaction; private message contents are not exposed by the explorer.
+
 The application, indexer and frontend already recognize the existing Verge
 testnet. The committed profile uses genesis
 `000005e0bb94e3a30a565d1a14ad95a189d47ca45c5bbbe48ee7a32eab8cb980`,

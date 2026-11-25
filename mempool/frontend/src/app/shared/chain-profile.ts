@@ -23,9 +23,15 @@ export function assertVergeChainIdentity(value: unknown, selectedNetwork: string
   }
 }
 
-/** Display classification only: the indexer validates the Base58Check checksum.
+/** Display classification only: the indexer validates Base58Check and Bech32m checksums.
  * Decode the whole version byte; first-character rules confuse Verge networks. */
-export function vergeAddressType(address: string, network: string): 'p2pkh' | 'p2sh' | 'p2pk' | 'unknown' {
+export function vergeAddressType(address: string, network: string): 'p2pkh' | 'p2sh' | 'p2pk' | 'pq_keyhash' | 'pq_multisig' | 'unknown' {
+  const hrp = network === '' || network === 'mainnet' ? 'xvgpq' : network === 'testnet' ? 'xvgtpq' : network === 'regtest' ? 'xvgrpq' : '';
+  if (hrp && (address === address.toLowerCase() || address === address.toUpperCase())) {
+    const value = address.toLowerCase();
+    if (new RegExp(`^${hrp}1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$`).test(value)) { return 'pq_keyhash'; }
+    if (new RegExp(`^${hrp}1q[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$`).test(value)) { return 'pq_multisig'; }
+  }
   if (/^(?:04[\da-fA-F]{128}|0[23][\da-fA-F]{64})$/.test(address)) { return 'p2pk'; }
   if (!/^[1-9A-HJ-NP-Za-km-z]{26,35}$/.test(address)) { return 'unknown'; }
   const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
