@@ -116,12 +116,10 @@ fn native_pq_addresses_match_core_and_are_strictly_network_scoped() {
     }
 }
 
+type HybridCase = (Vec<u8>, usize, Vec<(usize, usize)>, Vec<usize>);
+
 // Structural fixtures only: Core, not the indexer, verifies votes/evidence.
-fn hybrid_case(
-    votes: u8,
-    blocks: u8,
-    evidence: u8,
-) -> (Vec<u8>, usize, Vec<(usize, usize)>, Vec<usize>) {
+fn hybrid_case(votes: u8, blocks: u8, evidence: u8) -> HybridCase {
     let raw = unhex(fixtures()["blocks"][0]["raw"].as_str().unwrap());
     let block: Block = deserialize(&raw).unwrap();
     let original = block.pos_extension.as_ref().unwrap();
